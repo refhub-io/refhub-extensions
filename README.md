@@ -1,6 +1,6 @@
 # RefHub Browser Extension Prototype
 
-This repo contains the first working RefHub browser extension prototype described in [`docs/spec.md`](/opt/openclaw/projects/r2d2/refhub-extensions/docs/spec.md). It is Chrome-first on Manifest V3, keeps scope narrow, and uses a single shared source tree that can emit Chrome and Firefox builds.
+This repo contains the first working RefHub browser extension prototype described in [`docs/spec.md`](/opt/openclaw/projects/r2d2/refhub-extensions/docs/spec.md). It keeps scope narrow, uses one shared source tree, and now emits browser-specific manifests so both Chrome and Firefox builds are loadable from the same codebase.
 
 ## What the prototype does
 
@@ -9,6 +9,7 @@ This repo contains the first working RefHub browser extension prototype describe
 - shows a popup preview with page type, DOI, source, and normalized item fields
 - lets the user configure a RefHub API base URL and API key
 - lists writable vaults from RefHub and saves a single item with `POST /api/v1/vaults/:vaultId/items`
+- opens the matching RefHub route after save: `/public/:slug` for public vaults, `/vault/:id` for private or shared vaults
 - reports clear setup, extraction, auth, and save errors
 
 ## Build
@@ -30,6 +31,15 @@ Build output:
 - `dist/chrome`
 - `dist/firefox`
 
+Manifest strategy:
+
+- Chrome build keeps MV3 `background.service_worker`
+- Firefox build swaps to MV3 `background.scripts` so it loads as a temporary add-on in Firefox without forking the runtime code
+
+Branding:
+
+- extension icons are derived from the existing RefHub favicon asset, reused as the cleanest available project-owned identity mark for now
+
 ## Load locally
 
 ### Chrome / Chromium
@@ -47,16 +57,44 @@ Build output:
 3. Click `Load Temporary Add-on...`.
 4. Select [`dist/firefox/manifest.json`](/opt/openclaw/projects/r2d2/refhub-extensions/dist/firefox/manifest.json).
 
-Chrome is the primary target for this prototype. The Firefox build is generated from the same codebase but is not yet verified end-to-end.
+Firefox is generated from the same codebase with a browser-specific background manifest shim. The temporary add-on entrypoint is [`dist/firefox/manifest.json`](/opt/openclaw/projects/r2d2/refhub-extensions/dist/firefox/manifest.json).
 
 ## Configure and test
 
-1. Open the extension options page.
-2. Set `RefHub API base URL`, for example `https://refhub-api.netlify.app`.
-3. Set `RefHub app URL`, for example `https://refhub.io`.
-4. Paste a RefHub API key with `vaults:read` and `vaults:write`.
-5. Open a supported page and click the extension action.
-6. Confirm the preview, choose a writable vault, and click `Save to RefHub`.
+1. Sign in to RefHub web app.
+2. Open `https://refhub.io/profile-edit`.
+3. Switch to the `api_keys` tab.
+4. Create a key with `vaults:read` and `vaults:write`.
+5. Optionally restrict the key to selected vaults for least-privilege access.
+6. Open the extension options page.
+7. Set `RefHub API base URL` to the backend root, for example `https://refhub-api.netlify.app`.
+8. Set `RefHub app URL` to the frontend root, for example `https://refhub.io`.
+9. Paste the API key.
+10. Open a supported page and click the extension action.
+11. Confirm the preview, choose a writable vault, and click `save_to_refhub`.
+
+Important setup details:
+
+- `RefHub API base URL` is the backend origin only. Do not append `/api/v1`.
+- `RefHub app URL` is the frontend origin used for post-save links.
+- Current frontend key-creation path is `/profile-edit` → `api_keys`.
+- The extension only surfaces writable vaults (`owner` or `editor` access).
+
+Required API-key scopes:
+
+- `vaults:read` to list accessible vaults
+- `vaults:write` to create items in the selected vault
+
+Not required for this extension:
+
+- `vaults:export`
+
+Extension permissions and why they exist:
+
+- `activeTab` so capture only runs after explicit user action on the current tab
+- `scripting` so the extension can extract metadata from the active tab
+- `storage` so settings and last-used vault are stored locally
+- broad host permissions because the prototype must be able to call the configured RefHub API origin at runtime
 
 Expected v1-supported pages:
 
@@ -74,7 +112,7 @@ Expected v1 exclusions:
 
 ## Architecture
 
-- `src/js/background.js`: service worker, extraction orchestration, RefHub API calls, vault caching
+- `src/js/background.js`: background runtime, extraction orchestration, RefHub API calls, vault caching, open-in-app route selection
 - `src/js/popup.js`: capture preview, vault picker, save flow
 - `src/js/options.js`: API base URL and API key configuration
 - `scripts/build.mjs`: emits browser-specific manifests from one shared source tree

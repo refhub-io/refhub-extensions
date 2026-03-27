@@ -5,13 +5,15 @@ const apiBaseUrl = document.querySelector("#api-base-url");
 const appBaseUrl = document.querySelector("#app-base-url");
 const apiKey = document.querySelector("#api-key");
 const statusBanner = document.querySelector("#settings-status");
+const keyPathLink = document.querySelector("#api-key-path-link");
 
 document.querySelector("#clear-settings").addEventListener("click", async () => {
   await clearConfig();
   apiBaseUrl.value = "";
   appBaseUrl.value = "";
   apiKey.value = "";
-  showStatus("Settings cleared.", "success");
+  renderKeyPath("");
+  showStatus("settings_cleared", "success");
 });
 
 form.addEventListener("submit", async (event) => {
@@ -23,7 +25,8 @@ form.addEventListener("submit", async (event) => {
     apiKey: apiKey.value.trim(),
   });
 
-  showStatus("Settings saved. Re-open the popup to capture and save.", "success");
+  renderKeyPath(appBaseUrl.value);
+  showStatus("settings_saved • reopen_popup_to_capture", "success");
 });
 
 bootstrap().catch((error) => {
@@ -35,6 +38,7 @@ async function bootstrap() {
   apiBaseUrl.value = config.apiBaseUrl;
   appBaseUrl.value = config.appBaseUrl;
   apiKey.value = config.apiKey;
+  renderKeyPath(config.appBaseUrl);
 }
 
 function showStatus(message, variant) {
@@ -44,4 +48,9 @@ function showStatus(message, variant) {
 
 function sanitizeUrl(value) {
   return value.trim().replace(/\/+$/, "");
+}
+
+function renderKeyPath(appUrl) {
+  const base = sanitizeUrl(appUrl) || "https://refhub.io";
+  keyPathLink.href = `${base}/profile-edit`;
 }

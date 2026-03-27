@@ -7,55 +7,75 @@
     <link rel="stylesheet" href="styles/app.css" />
   </head>
   <body class="popup-shell">
-    <main class="panel">
+    <main class="panel panel-popup">
       <header class="panel-header">
-        <div>
-          <p class="eyebrow">RefHub</p>
-          <h1>Capture current tab</h1>
+        <div class="brand-block">
+          <img src="icons/refhub-32.png" width="32" height="32" alt="RefHub icon" class="brand-icon" />
+          <div>
+            <p class="eyebrow">// refhub_capture</p>
+            <h1>capture_current_tab</h1>
+            <p id="quick-status" class="microcopy">waiting_for_config</p>
+          </div>
         </div>
-        <button id="open-options" class="ghost-button" type="button">Settings</button>
+        <button id="open-options" class="ghost-button" type="button">settings</button>
       </header>
 
       <section id="message-banner" class="banner hidden" aria-live="polite"></section>
 
       <section id="setup-card" class="card hidden">
-        <h2>Configure RefHub</h2>
-        <p>
-          Add the RefHub API base URL and an API key with <code>vaults:read</code> and
-          <code>vaults:write</code> in settings before saving.
+        <div class="section-heading">
+          <h2>// setup</h2>
+          <span class="pill">required</span>
+        </div>
+        <p class="supporting-text">
+          create a RefHub API key from <code>/profile-edit</code> → <code>api_keys</code>. enable
+          <code>vaults:read</code> and <code>vaults:write</code>. optional vault restriction is supported.
         </p>
-        <button id="setup-button" class="primary-button" type="button">Open settings</button>
+        <div class="info-grid">
+          <article class="info-tile">
+            <span class="tile-label">app_url</span>
+            <span class="tile-value">https://refhub.io</span>
+          </article>
+          <article class="info-tile">
+            <span class="tile-label">api_base</span>
+            <span class="tile-value">https://refhub-api.netlify.app</span>
+          </article>
+        </div>
+        <div class="inline-actions">
+          <button id="setup-button" class="primary-button" type="button">open_settings</button>
+          <a id="setup-app-link" class="ghost-button link-button" href="https://refhub.io/profile-edit" target="_blank" rel="noreferrer">open_refhub</a>
+        </div>
       </section>
 
       <section id="capture-card" class="card hidden">
         <div class="section-heading">
-          <h2>Preview</h2>
+          <h2>// preview</h2>
           <span id="confidence-badge" class="pill">-</span>
         </div>
-        <div id="capture-loading" class="status-row">Extracting page metadata…</div>
+        <div id="capture-loading" class="status-row">// extracting_page_metadata...</div>
         <div id="capture-content" class="hidden">
           <p id="capture-title" class="capture-title"></p>
           <p id="capture-subtitle" class="capture-subtitle"></p>
           <dl class="meta-list">
             <div>
-              <dt>Type</dt>
+              <dt>page_type</dt>
               <dd id="field-page-type">-</dd>
             </div>
             <div>
-              <dt>DOI</dt>
+              <dt>doi</dt>
               <dd id="field-doi">-</dd>
             </div>
             <div>
-              <dt>Source</dt>
+              <dt>source</dt>
               <dd id="field-source">-</dd>
             </div>
             <div>
-              <dt>URL</dt>
+              <dt>url</dt>
               <dd id="field-url" class="multiline">-</dd>
             </div>
           </dl>
           <details class="details-box">
-            <summary>Raw extracted fields</summary>
+            <summary>// raw_extracted_fields</summary>
             <pre id="raw-preview"></pre>
           </details>
         </div>
@@ -63,17 +83,18 @@
 
       <section id="vault-card" class="card hidden">
         <div class="section-heading">
-          <h2>Vault</h2>
-          <button id="refresh-vaults" class="ghost-button compact" type="button">Refresh</button>
+          <h2>// target_vault</h2>
+          <button id="refresh-vaults" class="ghost-button compact" type="button">refresh</button>
         </div>
         <label class="field">
-          <span>Writable vault</span>
+          <span>writable_vault</span>
           <select id="vault-select"></select>
         </label>
+        <p id="vault-hint" class="microcopy">// loading_vault_routes</p>
       </section>
 
       <footer class="actions">
-        <button id="save-button" class="primary-button" type="button" disabled>Save to RefHub</button>
+        <button id="save-button" class="primary-button" type="button" disabled>save_to_refhub</button>
       </footer>
     </main>
 
