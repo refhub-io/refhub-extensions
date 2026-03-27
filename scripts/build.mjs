@@ -69,6 +69,18 @@ function createBaseManifest() {
     action: {
       default_title: "RefHub Capture",
       default_popup: "popup.html",
+      default_icon: {
+        16: "icons/refhub-16.png",
+        32: "icons/refhub-32.png",
+        48: "icons/refhub-48.png",
+        128: "icons/refhub-128.png",
+      },
+    },
+    icons: {
+      16: "icons/refhub-16.png",
+      32: "icons/refhub-32.png",
+      48: "icons/refhub-48.png",
+      128: "icons/refhub-128.png",
     },
     background: {
       service_worker: "js/background.js",
@@ -93,6 +105,10 @@ function createChromeManifest() {
 function createFirefoxManifest() {
   return {
     ...createBaseManifest(),
+    background: {
+      scripts: ["js/background.js"],
+      type: "module",
+    },
     browser_specific_settings: {
       gecko: {
         id: "refhub-capture-prototype@refhub.io",

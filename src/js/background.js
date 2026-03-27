@@ -139,8 +139,14 @@ function pickWritableVaults(vaults) {
 }
 
 function buildVaultUrl(config, vaultId) {
+  const vault = vaultCache.data?.find?.((entry) => entry.id === vaultId);
+
   if (config.appBaseUrl) {
-    return `${config.appBaseUrl}/vaults/${vaultId}`;
+    if (vault?.visibility === "public" && vault?.public_slug) {
+      return `${config.appBaseUrl}/public/${vault.public_slug}`;
+    }
+
+    return `${config.appBaseUrl}/vault/${vaultId}`;
   }
   return "";
 }
