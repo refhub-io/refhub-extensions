@@ -23,6 +23,12 @@ export async function saveConfig(nextConfig) {
     ...DEFAULT_CONFIG,
     ...nextConfig,
   };
+
+  if (!BUILD_DEFAULTS.allowCustomUrls) {
+    config.apiBaseUrl = DEFAULT_CONFIG.apiBaseUrl;
+    config.appBaseUrl = DEFAULT_CONFIG.appBaseUrl;
+  }
+
   await browserApi.storage.local.set({ [STORAGE_KEY]: config });
   return config;
 }

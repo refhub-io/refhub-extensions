@@ -7,7 +7,7 @@ This repo contains the first working RefHub browser extension prototype describe
 - reads the current tab URL on user action
 - extracts a small metadata bundle from the page using canonical URL, citation meta tags, JSON-LD, Open Graph, and document metadata
 - shows a popup preview with page type, DOI, source, and normalized item fields
-- lets the user configure a RefHub API base URL and API key
+- lets the user configure a RefHub API key
 - lists writable vaults from RefHub and saves a single item with `POST /api/v1/vaults/:vaultId/items`
 - opens the matching RefHub route after save: `/public/:slug` for public vaults, `/vault/:id` for private or shared vaults
 - reports clear setup, extraction, auth, and save errors
@@ -18,12 +18,21 @@ This repo contains the first working RefHub browser extension prototype describe
 npm run build
 ```
 
-Optional build-time defaults:
+Release builds now default to production RefHub endpoints and keep them locked in the options UI. For local or self-hosted work, use the dev build path.
+
+Optional dev build-time overrides:
 
 ```bash
+REFHUB_ALLOW_CUSTOM_URLS=1 \
 REFHUB_API_BASE_URL=https://refhub-api.netlify.app \
 REFHUB_APP_BASE_URL=https://refhub.io \
 npm run build
+```
+
+Shortcut:
+
+```bash
+npm run build:dev
 ```
 
 Build output:
@@ -67,16 +76,18 @@ Firefox is generated from the same codebase with a browser-specific background m
 4. Create a key with `vaults:read` and `vaults:write`.
 5. Optionally restrict the key to selected vaults for least-privilege access.
 6. Open the extension options page.
-7. Set `RefHub API base URL` to the backend root, for example `https://refhub-api.netlify.app`.
-8. Set `RefHub app URL` to the frontend root, for example `https://refhub.io`.
-9. Paste the API key.
-10. Open a supported page and click the extension action.
-11. Confirm the preview, choose a writable vault, and click `save_to_refhub`.
+7. Paste the API key.
+8. Open a supported page and click the extension action.
+9. Confirm the preview, choose a writable vault, and click `save_to_refhub`.
+
+For local or self-hosted testing, build with `REFHUB_ALLOW_CUSTOM_URLS=1` and then set:
+
+- `RefHub API base URL` to the backend origin only. Do not append `/api/v1`.
+- `RefHub app URL` to the frontend origin used for post-save links.
 
 Important setup details:
 
-- `RefHub API base URL` is the backend origin only. Do not append `/api/v1`.
-- `RefHub app URL` is the frontend origin used for post-save links.
+- Release builds already bundle the production RefHub API and app URLs.
 - Current frontend key-creation path is `/profile-edit` → `api_keys`.
 - The extension only surfaces writable vaults (`owner` or `editor` access).
 
@@ -93,8 +104,9 @@ Extension permissions and why they exist:
 
 - `activeTab` so capture only runs after explicit user action on the current tab
 - `scripting` so the extension can extract metadata from the active tab
-- `storage` so settings and last-used vault are stored locally
-- broad host permissions because the prototype must be able to call the configured RefHub API origin at runtime
+- `storage` so API key and last-used vault are stored locally
+- production host permissions are narrowed to the bundled RefHub API origin
+- dev builds keep broader host access so local override targets still work
 
 Expected v1-supported pages:
 
@@ -114,14 +126,14 @@ Expected v1 exclusions:
 
 - `src/js/background.js`: background runtime, extraction orchestration, RefHub API calls, vault caching, open-in-app route selection
 - `src/js/popup.js`: capture preview, vault picker, save flow
-- `src/js/options.js`: API base URL and API key configuration
+- `src/js/options.js`: API key configuration plus dev-only endpoint overrides
 - `scripts/build.mjs`: emits browser-specific manifests from one shared source tree
 
 The prototype uses `activeTab` + `scripting.executeScript` so capture only happens after explicit user action. It does not keep persistent access to arbitrary sites.
 
 ## Cross-browser strategy
 
-Zotero’s connector architecture is a useful concept reference here: keep the extraction and product logic shared, and isolate browser runtime differences in a thin adapter/build layer instead of forking the whole extension. We can follow that same general approach without borrowing code.
+Zotero’s connector architecture is a useful concept reference here: keep the extraction and product logic shared, and isolate browser runtime differences in a thin adapter/build layer instead of forking the whole runtime code. We can follow that same general approach without borrowing code.
 
 Practical same-codebase strategy for RefHub:
 

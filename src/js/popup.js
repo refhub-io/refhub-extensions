@@ -6,6 +6,8 @@ const elements = {
   setupCard: document.querySelector("#setup-card"),
   setupButton: document.querySelector("#setup-button"),
   setupAppLink: document.querySelector("#setup-app-link"),
+  setupAppBase: document.querySelector("#setup-app-base"),
+  setupApiBase: document.querySelector("#setup-api-base"),
   captureCard: document.querySelector("#capture-card"),
   captureLoading: document.querySelector("#capture-loading"),
   captureContent: document.querySelector("#capture-content"),
@@ -57,14 +59,14 @@ async function bootstrap() {
 
   if (!state.config.apiBaseUrl || !state.config.apiKey) {
     elements.setupCard.classList.remove("hidden");
-    renderSetupLink(state.config.appBaseUrl);
+    renderSetupState(state.config);
     showBanner("finish setup before saving capture.", "error");
     return;
   }
 
   elements.captureCard.classList.remove("hidden");
   elements.vaultCard.classList.remove("hidden");
-  renderSetupLink(state.config.appBaseUrl);
+  renderSetupState(state.config);
   renderQuickStatus(state.config);
 
   await Promise.all([extractCurrentTab(), loadVaults(false)]);
@@ -220,9 +222,11 @@ function renderQuickStatus(config) {
   elements.quickStatus.textContent = `api_ready • open_target ${target}`;
 }
 
-function renderSetupLink(appBaseUrl) {
-  const target = appBaseUrl || "https://refhub.io";
+function renderSetupState(config) {
+  const target = config.appBaseUrl || "https://refhub.io";
   elements.setupAppLink.href = `${target}/profile-edit`;
+  elements.setupAppBase.textContent = target;
+  elements.setupApiBase.textContent = config.apiBaseUrl || "not_configured";
 }
 
 async function openOptions() {
