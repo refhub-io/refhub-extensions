@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RefHub Capture Settings</title>
+    <link rel="stylesheet" href="styles/app.css" />
+  </head>
+  <body class="options-shell">
+    <main class="panel panel-wide">
+      <header class="panel-header">
+        <div>
+          <p class="eyebrow">RefHub</p>
+          <h1>Extension settings</h1>
+        </div>
+      </header>
+
+      <section class="card">
+        <h2>Connection</h2>
+        <p class="supporting-text">
+          This prototype uses a RefHub API key for vault list and item creation. Generate one in the RefHub web app
+          with <code>vaults:read</code> and <code>vaults:write</code>.
+        </p>
+        <form id="settings-form" class="form-grid">
+          <label class="field">
+            <span>RefHub API base URL</span>
+            <input id="api-base-url" name="apiBaseUrl" type="url" placeholder="https://refhub-api.netlify.app" required />
+          </label>
+          <label class="field">
+            <span>RefHub app URL</span>
+            <input id="app-base-url" name="appBaseUrl" type="url" placeholder="https://refhub.io" />
+          </label>
+          <label class="field">
+            <span>API key</span>
+            <textarea id="api-key" name="apiKey" rows="4" placeholder="Paste RefHub API key" required></textarea>
+          </label>
+          <div class="inline-actions">
+            <button class="primary-button" type="submit">Save settings</button>
+            <button id="clear-settings" class="ghost-button" type="button">Clear</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>What is shared on save</h2>
+        <ul class="simple-list">
+          <li>Normalized page metadata such as title, authors, DOI, year, journal, abstract, and URL</li>
+          <li>The selected RefHub vault ID</li>
+          <li>No full page HTML is sent by this prototype</li>
+        </ul>
+      </section>
+
+      <section id="settings-status" class="banner hidden" aria-live="polite"></section>
+    </main>
+
+    <script type="module" src="js/options.js"></script>
+  </body>
+</html>

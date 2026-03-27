@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RefHub Capture</title>
+    <link rel="stylesheet" href="styles/app.css" />
+  </head>
+  <body class="popup-shell">
+    <main class="panel">
+      <header class="panel-header">
+        <div>
+          <p class="eyebrow">RefHub</p>
+          <h1>Capture current tab</h1>
+        </div>
+        <button id="open-options" class="ghost-button" type="button">Settings</button>
+      </header>
+
+      <section id="message-banner" class="banner hidden" aria-live="polite"></section>
+
+      <section id="setup-card" class="card hidden">
+        <h2>Configure RefHub</h2>
+        <p>
+          Add the RefHub API base URL and an API key with <code>vaults:read</code> and
+          <code>vaults:write</code> in settings before saving.
+        </p>
+        <button id="setup-button" class="primary-button" type="button">Open settings</button>
+      </section>
+
+      <section id="capture-card" class="card hidden">
+        <div class="section-heading">
+          <h2>Preview</h2>
+          <span id="confidence-badge" class="pill">-</span>
+        </div>
+        <div id="capture-loading" class="status-row">Extracting page metadata…</div>
+        <div id="capture-content" class="hidden">
+          <p id="capture-title" class="capture-title"></p>
+          <p id="capture-subtitle" class="capture-subtitle"></p>
+          <dl class="meta-list">
+            <div>
+              <dt>Type</dt>
+              <dd id="field-page-type">-</dd>
+            </div>
+            <div>
+              <dt>DOI</dt>
+              <dd id="field-doi">-</dd>
+            </div>
+            <div>
+              <dt>Source</dt>
+              <dd id="field-source">-</dd>
+            </div>
+            <div>
+              <dt>URL</dt>
+              <dd id="field-url" class="multiline">-</dd>
+            </div>
+          </dl>
+          <details class="details-box">
+            <summary>Raw extracted fields</summary>
+            <pre id="raw-preview"></pre>
+          </details>
+        </div>
+      </section>
+
+      <section id="vault-card" class="card hidden">
+        <div class="section-heading">
+          <h2>Vault</h2>
+          <button id="refresh-vaults" class="ghost-button compact" type="button">Refresh</button>
+        </div>
+        <label class="field">
+          <span>Writable vault</span>
+          <select id="vault-select"></select>
+        </label>
+      </section>
+
+      <footer class="actions">
+        <button id="save-button" class="primary-button" type="button" disabled>Save to RefHub</button>
+      </footer>
+    </main>
+
+    <script type="module" src="js/popup.js"></script>
+  </body>
+</html>
