@@ -5,6 +5,7 @@ const elements = {
   banner: document.querySelector("#message-banner"),
   setupCard: document.querySelector("#setup-card"),
   setupButton: document.querySelector("#setup-button"),
+  setupAppLink: document.querySelector("#setup-app-link"),
   captureCard: document.querySelector("#capture-card"),
   captureLoading: document.querySelector("#capture-loading"),
   captureContent: document.querySelector("#capture-content"),
@@ -21,6 +22,8 @@ const elements = {
   refreshVaults: document.querySelector("#refresh-vaults"),
   saveButton: document.querySelector("#save-button"),
   openOptions: document.querySelector("#open-options"),
+  quickStatus: document.querySelector("#quick-status"),
+  vaultHint: document.querySelector("#vault-hint"),
 };
 
 let currentCapture = null;
@@ -45,7 +48,7 @@ elements.vaultSelect.addEventListener("change", async () => {
 bootstrap().catch((error) => {
   showBanner(error.message, "error");
   elements.captureCard.classList.remove("hidden");
-  elements.captureLoading.textContent = "Failed to initialize popup.";
+  elements.captureLoading.textContent = "// failed_to_initialize_popup";
 });
 
 async function bootstrap() {
@@ -54,12 +57,15 @@ async function bootstrap() {
 
   if (!state.config.apiBaseUrl || !state.config.apiKey) {
     elements.setupCard.classList.remove("hidden");
-    showBanner("Settings are required before capture can be saved.", "error");
+    renderSetupLink(state.config.appBaseUrl);
+    showBanner("finish setup before saving capture.", "error");
     return;
   }
 
   elements.captureCard.classList.remove("hidden");
   elements.vaultCard.classList.remove("hidden");
+  renderSetupLink(state.config.appBaseUrl);
+  renderQuickStatus(state.config);
 
   await Promise.all([extractCurrentTab(), loadVaults(false)]);
 }
@@ -72,11 +78,11 @@ async function extractCurrentTab() {
   try {
     currentCapture = await sendRuntimeMessage({ type: "refhub:extract-current-tab" });
     renderCapture(currentCapture);
-    showBanner(currentCapture.saveable ? "Metadata extracted and ready to save." : currentCapture.blockReason, currentCapture.saveable ? "success" : "error");
+    showBanner(currentCapture.saveable ? "metadata extracted • ready_to_save" : currentCapture.blockReason, currentCapture.saveable ? "success" : "error");
   } catch (error) {
     currentCapture = null;
     showBanner(error.message, "error");
-    elements.captureLoading.textContent = "Could not extract metadata from this tab.";
+    elements.captureLoading.textContent = "// could_not_extract_tab_metadata";
   }
 }
 
@@ -101,11 +107,11 @@ function renderCapture(capture) {
   elements.captureLoading.classList.add("hidden");
   elements.captureContent.classList.remove("hidden");
   elements.confidenceBadge.textContent = `${Math.round(capture.confidence * 100)}% confidence`;
-  elements.captureTitle.textContent = capture.item.title || "Untitled page";
+  elements.captureTitle.textContent = capture.item.title || "untitled_page";
   elements.captureSubtitle.textContent = buildSubtitle(capture.item);
   elements.pageType.textContent = capture.pageType;
-  elements.doi.textContent = capture.item.doi || "Not found";
-  elements.source.textContent = capture.item.journal || capture.hostname || "Unknown";
+  elements.doi.textContent = capture.item.doi || "not_found";
+  elements.source.textContent = capture.item.journal || capture.hostname || "unknown_source";
   elements.url.textContent = capture.item.url || "-";
   elements.rawPreview.textContent = JSON.stringify(
     {
@@ -124,7 +130,7 @@ function renderCapture(capture) {
 }
 
 function buildSubtitle(item) {
-  const left = item.authors?.length ? item.authors.join(", ") : "No authors found";
+  const left = item.authors?.length ? item.authors.join(", ") : "no_authors_found";
   const right = [item.year, item.journal].filter(Boolean).join(" · ");
   return right ? `${left} · ${right}` : left;
 }
@@ -133,10 +139,11 @@ function renderVaults(vaults, lastVaultId) {
   if (!vaults.length) {
     const option = document.createElement("option");
     option.value = "";
-    option.textContent = "No writable vaults found";
+    option.textContent = "no_writable_vaults_found";
     elements.vaultSelect.append(option);
     elements.vaultSelect.disabled = true;
-    showBanner("No writable vaults are available for this API key.", "error");
+    elements.vaultHint.textContent = "// current_key_cannot_write_any_accessible_vault";
+    showBanner("no writable vaults available for this key.", "error");
     return;
   }
 
@@ -144,7 +151,7 @@ function renderVaults(vaults, lastVaultId) {
   for (const vault of vaults) {
     const option = document.createElement("option");
     option.value = vault.id;
-    option.textContent = `${vault.name} (${vault.permission})`;
+    option.textContent = `${vault.name} • ${vault.permission}`;
     if (vault.id === lastVaultId) {
       option.selected = true;
     }
@@ -157,6 +164,7 @@ function renderVaults(vaults, lastVaultId) {
 
   elements.vaultSelect.replaceChildren(fragment);
   elements.vaultSelect.disabled = false;
+  elements.vaultHint.textContent = "// public vaults open at /public/:slug • private/shared vaults open at /vault/:id";
   syncSaveButton();
 }
 
@@ -167,12 +175,12 @@ async function saveCapture() {
 
   const vaultId = elements.vaultSelect.value;
   if (!vaultId) {
-    showBanner("Choose a writable vault first.", "error");
+    showBanner("choose a writable vault first.", "error");
     return;
   }
 
   elements.saveButton.disabled = true;
-  elements.saveButton.textContent = "Saving…";
+  elements.saveButton.textContent = "saving...";
 
   try {
     const response = await sendRuntimeMessage({
@@ -184,7 +192,7 @@ async function saveCapture() {
     });
 
     const vault = writableVaults.find((entry) => entry.id === vaultId);
-    const vaultLabel = vault ? `Saved to ${vault.name}.` : "Saved to RefHub.";
+    const vaultLabel = vault ? `saved_to ${vault.name}` : "saved_to_refhub";
     showBanner(vaultLabel, "success");
     if (response.openUrl) {
       await browserApi.tabs.create({ url: response.openUrl });
@@ -192,7 +200,7 @@ async function saveCapture() {
   } catch (error) {
     showBanner(error.message, "error");
   } finally {
-    elements.saveButton.textContent = "Save to RefHub";
+    elements.saveButton.textContent = "save_to_refhub";
     syncSaveButton();
   }
 }
@@ -205,6 +213,16 @@ function syncSaveButton() {
 function showBanner(message, variant) {
   elements.banner.textContent = message;
   elements.banner.className = `banner ${variant}`;
+}
+
+function renderQuickStatus(config) {
+  const target = config.appBaseUrl || "https://refhub.io";
+  elements.quickStatus.textContent = `api_ready • open_target ${target}`;
+}
+
+function renderSetupLink(appBaseUrl) {
+  const target = appBaseUrl || "https://refhub.io";
+  elements.setupAppLink.href = `${target}/profile-edit`;
 }
 
 async function openOptions() {

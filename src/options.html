@@ -9,44 +9,85 @@
   <body class="options-shell">
     <main class="panel panel-wide">
       <header class="panel-header">
-        <div>
-          <p class="eyebrow">RefHub</p>
-          <h1>Extension settings</h1>
+        <div class="brand-block">
+          <img src="icons/refhub-32.png" width="32" height="32" alt="RefHub icon" class="brand-icon" />
+          <div>
+            <p class="eyebrow">// refhub_capture</p>
+            <h1>extension_settings</h1>
+            <p class="microcopy">dark-first capture for current tab metadata</p>
+          </div>
         </div>
       </header>
 
       <section class="card">
-        <h2>Connection</h2>
+        <div class="section-heading">
+          <h2>// connection</h2>
+          <span class="pill">required</span>
+        </div>
         <p class="supporting-text">
-          This prototype uses a RefHub API key for vault list and item creation. Generate one in the RefHub web app
-          with <code>vaults:read</code> and <code>vaults:write</code>.
+          this extension uses a RefHub API key for vault listing and item creation. create the key in
+          <a id="api-key-path-link" href="https://refhub.io/profile-edit" target="_blank" rel="noreferrer"><code>/profile-edit</code></a>
+          under <code>api_keys</code>.
         </p>
+        <div class="info-grid">
+          <article class="info-tile">
+            <span class="tile-label">required_scopes</span>
+            <span class="tile-value">vaults:read • vaults:write</span>
+          </article>
+          <article class="info-tile">
+            <span class="tile-label">optional_scope</span>
+            <span class="tile-value">vault restriction only if you want least-privilege keys</span>
+          </article>
+        </div>
         <form id="settings-form" class="form-grid">
           <label class="field">
-            <span>RefHub API base URL</span>
+            <span>refhub_api_base_url</span>
             <input id="api-base-url" name="apiBaseUrl" type="url" placeholder="https://refhub-api.netlify.app" required />
+            <small class="field-help">backend root only. do not include <code>/api/v1</code>.</small>
           </label>
           <label class="field">
-            <span>RefHub app URL</span>
+            <span>refhub_app_url</span>
             <input id="app-base-url" name="appBaseUrl" type="url" placeholder="https://refhub.io" />
+            <small class="field-help">used for open-in-app links after save.</small>
           </label>
           <label class="field">
-            <span>API key</span>
+            <span>api_key</span>
             <textarea id="api-key" name="apiKey" rows="4" placeholder="Paste RefHub API key" required></textarea>
+            <small class="field-help">the key can be restricted to selected vaults. the extension only shows writable vaults.</small>
           </label>
           <div class="inline-actions">
-            <button class="primary-button" type="submit">Save settings</button>
-            <button id="clear-settings" class="ghost-button" type="button">Clear</button>
+            <button class="primary-button" type="submit">save_settings</button>
+            <button id="clear-settings" class="ghost-button" type="button">clear</button>
           </div>
         </form>
       </section>
 
       <section class="card">
-        <h2>What is shared on save</h2>
+        <h2>// setup_flow</h2>
+        <ol class="simple-list">
+          <li>sign in to RefHub web app.</li>
+          <li>open <code>/profile-edit</code> and switch to <code>api_keys</code>.</li>
+          <li>create a key with <code>vaults:read</code> and <code>vaults:write</code>.</li>
+          <li>paste the key here and keep the app URL on <code>https://refhub.io</code> unless self-hosting.</li>
+        </ol>
+      </section>
+
+      <section class="card">
+        <h2>// what_is_sent_on_save</h2>
         <ul class="simple-list">
-          <li>Normalized page metadata such as title, authors, DOI, year, journal, abstract, and URL</li>
-          <li>The selected RefHub vault ID</li>
-          <li>No full page HTML is sent by this prototype</li>
+          <li>normalized page metadata such as title, authors, DOI, year, journal, abstract, and URL</li>
+          <li>the selected RefHub vault ID</li>
+          <li>no full page HTML is sent by this prototype</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>// extension_permissions</h2>
+        <ul class="simple-list">
+          <li><code>activeTab</code> so capture only runs on the page you explicitly opened from.</li>
+          <li><code>scripting</code> so the extension can read metadata from that active tab.</li>
+          <li><code>storage</code> so API base URL, app URL, API key, and last vault selection persist locally.</li>
+          <li>broad host access is currently required so the prototype can call your configured RefHub API origin.</li>
         </ul>
       </section>
 
