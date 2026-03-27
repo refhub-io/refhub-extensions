@@ -109,7 +109,7 @@ async function saveItem(payload) {
 
 function assertConfigured(config) {
   if (!config.apiBaseUrl || !config.apiKey) {
-    throw new Error("Open settings and configure the RefHub API base URL and API key first.");
+    throw new Error("Open settings and configure the RefHub API key first.");
   }
 }
 

@@ -5,6 +5,7 @@
   "description": "Chrome-first RefHub browser extension prototype",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:dev": "REFHUB_ALLOW_CUSTOM_URLS=1 node scripts/build.mjs",
     "clean": "node scripts/build.mjs --clean"
   }
 }

@@ -6,6 +6,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const srcDir = path.join(rootDir, "src");
 const distDir = path.join(rootDir, "dist");
+const PRODUCTION_API_BASE_URL = "https://refhub-api.netlify.app";
+const PRODUCTION_APP_BASE_URL = "https://refhub.io";
+const buildDefaults = {
+  apiBaseUrl: process.env.REFHUB_API_BASE_URL || PRODUCTION_API_BASE_URL,
+  appBaseUrl: process.env.REFHUB_APP_BASE_URL || PRODUCTION_APP_BASE_URL,
+  allowCustomUrls: process.env.REFHUB_ALLOW_CUSTOM_URLS === "1",
+};
 
 const args = new Set(process.argv.slice(2));
 
@@ -42,8 +49,9 @@ function buildInfo(browser) {
     browser,
     builtAt: new Date().toISOString(),
     defaults: {
-      refhubApiBaseUrl: process.env.REFHUB_API_BASE_URL || "",
-      refhubAppBaseUrl: process.env.REFHUB_APP_BASE_URL || "",
+      refhubApiBaseUrl: buildDefaults.apiBaseUrl,
+      refhubAppBaseUrl: buildDefaults.appBaseUrl,
+      refhubAllowCustomUrls: buildDefaults.allowCustomUrls,
     },
   };
 }
@@ -55,8 +63,9 @@ async function writeManifest(targetDir, manifest) {
   const optionsPath = path.join(targetDir, "js", "config-defaults.js");
   const template = await readFile(path.join(srcDir, "js", "config-defaults.template.js"), "utf8");
   const rendered = template
-    .replace("__REFHUB_API_BASE_URL__", JSON.stringify(process.env.REFHUB_API_BASE_URL || ""))
-    .replace("__REFHUB_APP_BASE_URL__", JSON.stringify(process.env.REFHUB_APP_BASE_URL || ""));
+    .replace("__REFHUB_API_BASE_URL__", JSON.stringify(buildDefaults.apiBaseUrl))
+    .replace("__REFHUB_APP_BASE_URL__", JSON.stringify(buildDefaults.appBaseUrl))
+    .replace("__REFHUB_ALLOW_CUSTOM_URLS__", JSON.stringify(buildDefaults.allowCustomUrls));
   await writeFile(optionsPath, rendered);
 }
 
@@ -88,7 +97,7 @@ function createBaseManifest() {
     },
     options_page: "options.html",
     permissions: ["activeTab", "storage", "scripting"],
-    host_permissions: ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+    host_permissions: buildHostPermissions(),
     web_accessible_resources: [
       {
         resources: ["build-info.json"],
@@ -116,4 +125,12 @@ function createFirefoxManifest() {
       },
     },
   };
+}
+
+function buildHostPermissions() {
+  if (buildDefaults.allowCustomUrls) {
+    return ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"];
+  }
+
+  return [`${buildDefaults.apiBaseUrl}/*`];
 }

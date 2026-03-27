@@ -22,7 +22,7 @@
       <section class="card">
         <div class="section-heading">
           <h2>// connection</h2>
-          <span class="pill">required</span>
+          <span id="build-mode-pill" class="pill">required</span>
         </div>
         <p class="supporting-text">
           this extension uses a RefHub API key for vault listing and item creation. create the key in
@@ -39,17 +39,32 @@
             <span class="tile-value">vault restriction only if you want least-privilege keys</span>
           </article>
         </div>
+        <div class="info-grid">
+          <article class="info-tile">
+            <span class="tile-label">refhub_api_base_url</span>
+            <span id="effective-api-base-url" class="tile-value">-</span>
+          </article>
+          <article class="info-tile">
+            <span class="tile-label">refhub_app_url</span>
+            <span id="effective-app-base-url" class="tile-value">-</span>
+          </article>
+        </div>
         <form id="settings-form" class="form-grid">
-          <label class="field">
-            <span>refhub_api_base_url</span>
-            <input id="api-base-url" name="apiBaseUrl" type="url" placeholder="https://refhub-api.netlify.app" required />
-            <small class="field-help">backend root only. do not include <code>/api/v1</code>.</small>
-          </label>
-          <label class="field">
-            <span>refhub_app_url</span>
-            <input id="app-base-url" name="appBaseUrl" type="url" placeholder="https://refhub.io" />
-            <small class="field-help">used for open-in-app links after save.</small>
-          </label>
+          <p id="build-mode-copy" class="microcopy">
+            release builds keep RefHub endpoints fixed. local or self-hosted targets are available through a dev override build.
+          </p>
+          <div id="advanced-endpoints" class="hidden">
+            <label class="field">
+              <span>refhub_api_base_url</span>
+              <input id="api-base-url" name="apiBaseUrl" type="url" placeholder="https://refhub-api.netlify.app" required />
+              <small class="field-help">backend root only. do not include <code>/api/v1</code>.</small>
+            </label>
+            <label class="field">
+              <span>refhub_app_url</span>
+              <input id="app-base-url" name="appBaseUrl" type="url" placeholder="https://refhub.io" />
+              <small class="field-help">used for open-in-app links after save.</small>
+            </label>
+          </div>
           <label class="field">
             <span>api_key</span>
             <textarea id="api-key" name="apiKey" rows="4" placeholder="Paste RefHub API key" required></textarea>
@@ -68,7 +83,7 @@
           <li>sign in to RefHub web app.</li>
           <li>open <code>/profile-edit</code> and switch to <code>api_keys</code>.</li>
           <li>create a key with <code>vaults:read</code> and <code>vaults:write</code>.</li>
-          <li>paste the key here and keep the app URL on <code>https://refhub.io</code> unless self-hosting.</li>
+          <li>paste the key here. release builds already point at production RefHub.</li>
         </ol>
       </section>
 
@@ -86,8 +101,8 @@
         <ul class="simple-list">
           <li><code>activeTab</code> so capture only runs on the page you explicitly opened from.</li>
           <li><code>scripting</code> so the extension can read metadata from that active tab.</li>
-          <li><code>storage</code> so API base URL, app URL, API key, and last vault selection persist locally.</li>
-          <li>broad host access is currently required so the prototype can call your configured RefHub API origin.</li>
+          <li><code>storage</code> so API key and last vault selection persist locally, with URL overrides only in dev builds.</li>
+          <li>host access is limited to the bundled RefHub API origin in release builds.</li>
         </ul>
       </section>
 
