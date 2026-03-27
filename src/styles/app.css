@@ -1,0 +1,259 @@
+:root {
+  color-scheme: light;
+  --bg: #f4f1e8;
+  --panel: #fffdf9;
+  --panel-strong: #f8f4ec;
+  --line: #d7ccb8;
+  --line-strong: #b9a17c;
+  --text: #1f1a15;
+  --muted: #5e5347;
+  --accent: #a4441b;
+  --accent-strong: #7f2d13;
+  --success-bg: #e8f5ea;
+  --success-text: #21502a;
+  --error-bg: #f8e4de;
+  --error-text: #7a2612;
+  --shadow: 0 14px 36px rgba(31, 26, 21, 0.12);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(164, 68, 27, 0.14), transparent 40%),
+    linear-gradient(180deg, #f7f2e8 0%, #efe6d5 100%);
+}
+
+.popup-shell {
+  width: 420px;
+  min-height: 560px;
+}
+
+.options-shell {
+  min-height: 100vh;
+  padding: 32px 16px;
+}
+
+.panel {
+  padding: 18px;
+}
+
+.panel-wide {
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.panel-header,
+.section-heading,
+.inline-actions,
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-header h1,
+.card h2 {
+  margin: 0;
+  font-family: "IBM Plex Serif", "Georgia", serif;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.card,
+.banner {
+  background: rgba(255, 253, 249, 0.88);
+  border: 1px solid rgba(185, 161, 124, 0.45);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+}
+
+.card {
+  padding: 16px;
+  margin-top: 14px;
+}
+
+.banner {
+  padding: 12px 14px;
+  margin-top: 14px;
+}
+
+.banner.success {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.banner.error {
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+.supporting-text {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.status-row {
+  color: var(--muted);
+}
+
+.capture-title {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.capture-subtitle {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.meta-list {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 0;
+}
+
+.meta-list div {
+  display: grid;
+  gap: 4px;
+}
+
+.meta-list dt {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.meta-list dd {
+  margin: 0;
+  font-size: 14px;
+}
+
+.multiline {
+  overflow-wrap: anywhere;
+}
+
+.details-box {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.details-box summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 12px 0 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.field span {
+  font-weight: 600;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  padding: 11px 12px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+textarea {
+  resize: vertical;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 15px;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.primary-button {
+  background: linear-gradient(135deg, var(--accent) 0%, #c56a2e 100%);
+  color: #fff8f0;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent-strong) 0%, #b55521 100%);
+}
+
+.ghost-button {
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.ghost-button.compact {
+  padding: 7px 10px;
+}
+
+.pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--panel-strong);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.form-grid {
+  margin-top: 12px;
+}
+
+.simple-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.hidden {
+  display: none;
+}
