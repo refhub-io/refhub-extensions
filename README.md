@@ -49,7 +49,18 @@ Branding:
 
 - extension icons are derived from the existing RefHub favicon asset, reused as the cleanest available project-owned identity mark for now
 
-## Load locally
+## Install
+
+For normal users, the intended install path is the browser store once review completes:
+
+- **Chrome / Chromium**: Chrome Web Store
+- **Firefox**: Mozilla Add-ons (AMO)
+
+Until those listings are approved, use the local/developer install flow below.
+
+See also: [`docs/RELEASE_NOTES.md`](./docs/RELEASE_NOTES.md) for user-facing install guidance.
+
+## Load locally / developer preview
 
 ### Chrome / Chromium
 
@@ -57,16 +68,25 @@ Branding:
 2. Open `chrome://extensions`.
 3. Enable Developer Mode.
 4. Click `Load unpacked`.
-5. Select [`dist/chrome`](/opt/openclaw/projects/r2d2/refhub-extensions/dist/chrome).
+5. Select [`dist/chrome`](./dist/chrome).
 
 ### Firefox
+
+Do **not** tell users to install the release zip directly via Firefox's normal extension install flow. Unsigned packages may be rejected as unverified.
+
+For testing before AMO approval:
 
 1. Run `npm run build`.
 2. Open `about:debugging#/runtime/this-firefox`.
 3. Click `Load Temporary Add-on...`.
-4. Select [`dist/firefox/manifest.json`](/opt/openclaw/projects/r2d2/refhub-extensions/dist/firefox/manifest.json).
+4. Select [`dist/firefox/manifest.json`](./dist/firefox/manifest.json).
 
-Firefox is generated from the same codebase with a browser-specific background manifest shim. The temporary add-on entrypoint is [`dist/firefox/manifest.json`](/opt/openclaw/projects/r2d2/refhub-extensions/dist/firefox/manifest.json).
+Firefox is generated from the same codebase with a browser-specific background manifest shim. The temporary add-on entrypoint is [`dist/firefox/manifest.json`](./dist/firefox/manifest.json).
+
+Notes:
+
+- Firefox temporary add-ons are removed on browser restart.
+- This is a testing path, not the long-term user install path.
 
 ## Configure and test
 
