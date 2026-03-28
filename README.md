@@ -51,42 +51,39 @@ Branding:
 
 ## Install
 
-For normal users, the intended install path is the browser store once review completes:
+### For normal users (recommended)
 
-- **Chrome / Chromium**: Chrome Web Store
-- **Firefox**: Mozilla Add-ons (AMO)
+Once review completes, install from your browser store:
 
-Until those listings are approved, use the local/developer install flow below.
+- **Chrome / Chromium**: [Chrome Web Store](https://chromewebstore.google.com) (pending approval)
+- **Firefox**: [Mozilla Add-ons / AMO](https://addons.mozilla.org) (pending approval)
 
-See also: [`docs/RELEASE_NOTES.md`](./docs/RELEASE_NOTES.md) for user-facing install guidance.
+### For early testers / developer preview
 
-## Load locally / developer preview
+Until store listings are approved, you can load the extension locally for testing.
 
-### Chrome / Chromium
+**Important:** Do **not** try to load the release zip directly in Firefox via "Extensions → Load From File". Firefox will reject unsigned packages as unverified. Use the temporary add-on method below instead.
 
-1. Run `npm run build`.
-2. Open `chrome://extensions`.
-3. Enable Developer Mode.
-4. Click `Load unpacked`.
-5. Select [`dist/chrome`](./dist/chrome).
+See also: [`docs/RELEASE_NOTES.md`](./docs/RELEASE_NOTES.md) for detailed user-facing install instructions.
 
-### Firefox
+#### Chrome / Chromium
 
-Do **not** tell users to install the release zip directly via Firefox's normal extension install flow. Unsigned packages may be rejected as unverified.
+1. Download the latest release or run `npm run build`.
+2. Extract the zip so you have a folder on disk.
+3. Open `chrome://extensions`.
+4. Enable **Developer Mode** (toggle in the top-right).
+5. Click **Load unpacked**.
+6. Select the extracted `dist/chrome` folder.
 
-For testing before AMO approval:
+#### Firefox
 
-1. Run `npm run build`.
-2. Open `about:debugging#/runtime/this-firefox`.
-3. Click `Load Temporary Add-on...`.
-4. Select [`dist/firefox/manifest.json`](./dist/firefox/manifest.json).
+1. Download the latest release or run `npm run build`.
+2. Extract the zip so you have a folder on disk.
+3. Open `about:debugging#/runtime/this-firefox`.
+4. Click **Load Temporary Add-on...**.
+5. Select `dist/firefox/manifest.json` from the extracted folder.
 
-Firefox is generated from the same codebase with a browser-specific background manifest shim. The temporary add-on entrypoint is [`dist/firefox/manifest.json`](./dist/firefox/manifest.json).
-
-Notes:
-
-- Firefox temporary add-ons are removed on browser restart.
-- This is a testing path, not the long-term user install path.
+**Note:** Firefox temporary add-ons are removed on browser restart. This is for preview/testing only, not the long-term user install path.
 
 ## Configure and test
 
