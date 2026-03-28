@@ -72,11 +72,11 @@ async function writeManifest(targetDir, manifest) {
 function createBaseManifest() {
   return {
     manifest_version: 3,
-    name: "RefHub Capture Prototype",
+    name: "refhub ext",
     version: "0.1.0",
-    description: "Capture the current tab and save a normalized item into a RefHub vault.",
+    description: "capture and save to your refhub vault.",
     action: {
-      default_title: "RefHub Capture",
+      default_title: "refhub Capture",
       default_popup: "popup.html",
       default_icon: {
         16: "icons/refhub-16.png",

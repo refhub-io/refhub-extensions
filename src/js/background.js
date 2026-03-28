@@ -109,7 +109,7 @@ async function saveItem(payload) {
 
 function assertConfigured(config) {
   if (!config.apiBaseUrl || !config.apiKey) {
-    throw new Error("Open settings and configure the RefHub API key first.");
+    throw new Error("Open settings and configure the refhub API key first.");
   }
 }
 
@@ -124,9 +124,9 @@ async function apiRequest(config, pathname, init) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = data?.error?.message || data?.message || `RefHub API request failed (${response.status}).`;
+    const message = data?.error?.message || data?.message || `refhub API request failed (${response.status}).`;
     if (response.status === 401 || response.status === 403) {
-      throw new Error(`RefHub rejected the configured credentials. ${message}`);
+      throw new Error(`refhub rejected the configured credentials. ${message}`);
     }
     throw new Error(message);
   }

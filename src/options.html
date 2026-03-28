@@ -3,16 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RefHub Capture Settings</title>
+    <title>refhub.io</title>
     <link rel="stylesheet" href="styles/app.css" />
   </head>
   <body class="options-shell">
     <main class="panel panel-wide">
       <header class="panel-header">
         <div class="brand-block">
-          <img src="icons/refhub-32.png" width="32" height="32" alt="RefHub icon" class="brand-icon" />
+          <img src="icons/refhub-32.png" width="32" height="32" alt="refhub icon" class="brand-icon" />
           <div>
-            <p class="eyebrow">// refhub_capture</p>
+            <p class="eyebrow">// refhub_ext</p>
             <h1>extension_settings</h1>
             <p class="microcopy">dark-first capture for current tab metadata</p>
           </div>
@@ -25,7 +25,7 @@
           <span id="build-mode-pill" class="pill">required</span>
         </div>
         <p class="supporting-text">
-          this extension uses a RefHub API key for vault listing and item creation. create the key in
+          this extension uses a refhub API key for vault listing and item creation. create the key in
           <a id="api-key-path-link" href="https://refhub.io/profile-edit" target="_blank" rel="noreferrer"><code>/profile-edit</code></a>
           under <code>api_keys</code>.
         </p>
@@ -51,7 +51,7 @@
         </div>
         <form id="settings-form" class="form-grid">
           <p id="build-mode-copy" class="microcopy">
-            release builds keep RefHub endpoints fixed. local or self-hosted targets are available through a dev override build.
+            release builds keep refhub endpoints fixed. local or self-hosted targets are available through a dev override build.
           </p>
           <div id="advanced-endpoints" class="hidden">
             <label class="field">
@@ -67,7 +67,7 @@
           </div>
           <label class="field">
             <span>api_key</span>
-            <textarea id="api-key" name="apiKey" rows="4" placeholder="Paste RefHub API key" required></textarea>
+            <textarea id="api-key" name="apiKey" rows="4" placeholder="Paste refhub API key" required></textarea>
             <small class="field-help">the key can be restricted to selected vaults. the extension only shows writable vaults.</small>
           </label>
           <div class="inline-actions">
@@ -80,10 +80,10 @@
       <section class="card">
         <h2>// setup_flow</h2>
         <ol class="simple-list">
-          <li>sign in to RefHub web app.</li>
+          <li>sign in to refhub web app.</li>
           <li>open <code>/profile-edit</code> and switch to <code>api_keys</code>.</li>
           <li>create a key with <code>vaults:read</code> and <code>vaults:write</code>.</li>
-          <li>paste the key here. release builds already point at production RefHub.</li>
+          <li>paste the key here. release builds already point at production refhub.</li>
         </ol>
       </section>
 
@@ -91,7 +91,7 @@
         <h2>// what_is_sent_on_save</h2>
         <ul class="simple-list">
           <li>normalized page metadata such as title, authors, DOI, year, journal, abstract, and URL</li>
-          <li>the selected RefHub vault ID</li>
+          <li>the selected refhub vault ID</li>
           <li>no full page HTML is sent by this prototype</li>
         </ul>
       </section>
@@ -102,7 +102,7 @@
           <li><code>activeTab</code> so capture only runs on the page you explicitly opened from.</li>
           <li><code>scripting</code> so the extension can read metadata from that active tab.</li>
           <li><code>storage</code> so API key and last vault selection persist locally, with URL overrides only in dev builds.</li>
-          <li>host access is limited to the bundled RefHub API origin in release builds.</li>
+          <li>host access is limited to the bundled refhub API origin in release builds.</li>
         </ul>
       </section>
 

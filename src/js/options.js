@@ -67,13 +67,13 @@ function sanitizeUrl(value) {
 function renderBuildMode() {
   if (BUILD_DEFAULTS.allowCustomUrls) {
     buildModePill.textContent = "dev_override";
-    buildModeCopy.textContent = "dev build exposes raw endpoints so you can point the extension at localhost or a self-hosted RefHub.";
+    buildModeCopy.textContent = "dev build exposes raw endpoints so you can point the extension at localhost or a self-hosted refhub.";
     advancedEndpoints.classList.remove("hidden");
     return;
   }
 
   buildModePill.textContent = "production_locked";
-  buildModeCopy.textContent = "release builds keep RefHub endpoints fixed. local or self-hosted targets are available through a dev override build.";
+  buildModeCopy.textContent = "release builds keep refhub endpoints fixed. local or self-hosted targets are available through a dev override build.";
   advancedEndpoints.classList.add("hidden");
 }
 
