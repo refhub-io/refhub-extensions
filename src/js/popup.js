@@ -22,6 +22,9 @@ const elements = {
   vaultCard: document.querySelector("#vault-card"),
   vaultSelect: document.querySelector("#vault-select"),
   refreshVaults: document.querySelector("#refresh-vaults"),
+  driveCard: document.querySelector("#drive-card"),
+  drivePill: document.querySelector("#drive-pill"),
+  driveCopy: document.querySelector("#drive-copy"),
   saveButton: document.querySelector("#save-button"),
   openOptions: document.querySelector("#open-options"),
   quickStatus: document.querySelector("#quick-status"),
@@ -31,6 +34,7 @@ const elements = {
 let currentCapture = null;
 let writableVaults = [];
 let currentConfig = null;
+let currentDriveStatus = null;
 
 document.querySelector("#setup-button").addEventListener("click", openOptions);
 elements.openOptions.addEventListener("click", openOptions);
@@ -66,10 +70,11 @@ async function bootstrap() {
 
   elements.captureCard.classList.remove("hidden");
   elements.vaultCard.classList.remove("hidden");
+  elements.driveCard.classList.remove("hidden");
   renderSetupState(state.config);
   renderQuickStatus(state.config);
 
-  await Promise.all([extractCurrentTab(), loadVaults(false)]);
+  await Promise.all([extractCurrentTab(), loadVaults(false), loadGoogleDriveStatus(false)]);
 }
 
 async function extractCurrentTab() {
@@ -102,6 +107,21 @@ async function loadVaults(forceRefresh) {
     showBanner(error.message, "error");
   } finally {
     syncSaveButton();
+  }
+}
+
+async function loadGoogleDriveStatus(forceRefresh) {
+  try {
+    currentDriveStatus = await sendRuntimeMessage({ type: "refhub:get-google-drive-status", forceRefresh });
+    renderGoogleDriveStatus(currentDriveStatus);
+  } catch (error) {
+    currentDriveStatus = {
+      linked: false,
+      folder_status: "unlinked",
+      folder_name: null,
+      folder_id: null,
+    };
+    renderGoogleDriveStatus(currentDriveStatus, error.message);
   }
 }
 
@@ -195,7 +215,8 @@ async function saveCapture() {
 
     const vault = writableVaults.find((entry) => entry.id === vaultId);
     const vaultLabel = vault ? `saved_to ${vault.name}` : "saved_to_refhub";
-    showBanner(vaultLabel, "success");
+    const storedToDrive = response.response?.data?.[0]?.pdf_storage?.stored;
+    showBanner(storedToDrive ? `${vaultLabel} • pdf_sent_to_drive` : vaultLabel, "success");
     if (response.openUrl) {
       await browserApi.tabs.create({ url: response.openUrl });
     }
@@ -219,7 +240,8 @@ function showBanner(message, variant) {
 
 function renderQuickStatus(config) {
   const target = config.appBaseUrl || "https://refhub.io";
-  elements.quickStatus.textContent = `api_ready • open_target ${target}`;
+  const driveFlag = currentDriveStatus?.linked ? "drive_pdf_storage_on" : "drive_pdf_storage_off";
+  elements.quickStatus.textContent = `api_ready • ${driveFlag} • open_target ${target}`;
 }
 
 function renderSetupState(config) {
@@ -231,4 +253,13 @@ function renderSetupState(config) {
 
 async function openOptions() {
   await browserApi.runtime.openOptionsPage();
+}
+
+function renderGoogleDriveStatus(status, errorMessage = "") {
+  const linked = Boolean(status?.linked);
+  elements.drivePill.textContent = linked ? "linked" : "inactive";
+  elements.driveCopy.textContent = linked
+    ? `pdf saves with a discovered pdf_url will be routed through RefHub into Drive folder ${status.folder_name || "refhub"}.`
+    : errorMessage || "google drive pdf storage is not linked for this RefHub account. saves will keep the source pdf_url only.";
+  renderQuickStatus(currentConfig || { appBaseUrl: "https://refhub.io" });
 }

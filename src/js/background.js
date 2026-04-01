@@ -7,6 +7,10 @@ const vaultCache = {
   data: null,
   fetchedAt: 0,
 };
+const driveStatusCache = {
+  data: null,
+  fetchedAt: 0,
+};
 
 const CACHE_TTL_MS = 60_000;
 
@@ -25,6 +29,8 @@ async function handleMessage(message) {
       return listVaults(Boolean(message.forceRefresh));
     case "refhub:extract-current-tab":
       return extractCurrentTab();
+    case "refhub:get-google-drive-status":
+      return getGoogleDriveStatus(Boolean(message.forceRefresh));
     case "refhub:save-item":
       return saveItem(message.payload);
     default:
@@ -89,6 +95,14 @@ async function saveItem(payload) {
     throw new Error("The captured item is missing a title.");
   }
 
+  const driveStatus = await getGoogleDriveStatus(false).catch(() => ({
+    linked: false,
+    folder_status: "unlinked",
+    folder_name: null,
+    folder_id: null,
+  }));
+  const shouldStorePdfInGoogleDrive = Boolean(item.pdf_url && driveStatus.linked);
+
   const response = await apiRequest(config, `/api/v1/vaults/${encodeURIComponent(vaultId)}/items`, {
     method: "POST",
     headers: {
@@ -96,6 +110,7 @@ async function saveItem(payload) {
     },
     body: JSON.stringify({
       items: [item],
+      store_pdfs_in_google_drive: shouldStorePdfInGoogleDrive,
     }),
   });
 
@@ -104,7 +119,27 @@ async function saveItem(payload) {
   return {
     response,
     openUrl: buildVaultUrl(config, vaultId),
+    driveStatus,
   };
+}
+
+async function getGoogleDriveStatus(forceRefresh) {
+  const config = await loadConfig();
+  assertConfigured(config);
+
+  if (!forceRefresh && driveStatusCache.data && Date.now() - driveStatusCache.fetchedAt < CACHE_TTL_MS) {
+    return driveStatusCache.data;
+  }
+
+  const response = await apiRequest(config, "/api/v1/extension/google-drive-status", { method: "GET" });
+  driveStatusCache.data = response.data || {
+    linked: false,
+    folder_status: "unlinked",
+    folder_name: null,
+    folder_id: null,
+  };
+  driveStatusCache.fetchedAt = Date.now();
+  return driveStatusCache.data;
 }
 
 function assertConfigured(config) {
