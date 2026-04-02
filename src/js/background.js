@@ -126,32 +126,75 @@ async function saveItem(payload) {
     throw new Error("The captured item is missing a title.");
   }
 
-  const driveStatus = await getGoogleDriveStatus(true).catch(() => ({
-    linked: false,
-    folder_status: "unlinked",
-    folder_name: null,
-    folder_id: null,
-  }));
-  const shouldStorePdfInGoogleDrive = Boolean(item.pdf_url && driveStatus.linked);
-
   const response = await apiRequest(config, `/api/v1/vaults/${encodeURIComponent(vaultId)}/items`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      items: [item],
-      store_pdfs_in_google_drive: shouldStorePdfInGoogleDrive,
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items: [item] }),
   });
 
   await saveConfig({ ...config, lastVaultId: vaultId });
 
+  // After the item is saved, attempt to fetch the PDF client-side (with browser cookies
+  // for institutional access) and upload it to the user's Drive folder.
+  const driveStatus = await getGoogleDriveStatus(true).catch(() => ({ linked: false }));
+  let pdfStorage = null;
+
+  const savedItemId = response.data?.[0]?.id;
+  if (item.pdf_url && driveStatus.linked && savedItemId) {
+    pdfStorage = await fetchAndUploadPdf(config, vaultId, savedItemId, item.pdf_url);
+  }
+
+  const responseWithPdf = {
+    ...response,
+    data: response.data?.map((entry, i) => (i === 0 ? { ...entry, pdf_storage: pdfStorage } : entry)),
+  };
+
   return {
-    response,
+    response: responseWithPdf,
     openUrl: buildVaultUrl(config, vaultId),
     driveStatus,
   };
+}
+
+async function fetchAndUploadPdf(config, vaultId, vaultPublicationId, pdfUrl) {
+  try {
+    const pdfResponse = await fetch(pdfUrl, {
+      method: "GET",
+      credentials: "include",
+      redirect: "follow",
+    });
+
+    if (!pdfResponse.ok) {
+      return { attempted: true, stored: false, message: `Failed to fetch PDF (${pdfResponse.status}).` };
+    }
+
+    const arrayBuffer = await pdfResponse.arrayBuffer();
+
+    const uploadResponse = await fetch(
+      `${config.apiBaseUrl}/api/v1/vaults/${encodeURIComponent(vaultId)}/items/${encodeURIComponent(vaultPublicationId)}/pdf`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          "Content-Type": "application/pdf",
+        },
+        body: arrayBuffer,
+      },
+    );
+
+    const data = await uploadResponse.json().catch(() => ({}));
+    if (!uploadResponse.ok) {
+      return {
+        attempted: true,
+        stored: false,
+        message: data?.error?.message || `Drive upload failed (${uploadResponse.status}).`,
+      };
+    }
+
+    return { attempted: true, stored: true, ...data.data };
+  } catch (error) {
+    return { attempted: true, stored: false, message: error.message };
+  }
 }
 
 async function getGoogleDriveStatus(forceRefresh) {
