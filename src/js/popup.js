@@ -19,6 +19,7 @@ const elements = {
   doi: document.querySelector("#field-doi"),
   source: document.querySelector("#field-source"),
   url: document.querySelector("#field-url"),
+  pdfUrl: document.querySelector("#field-pdf-url"),
   vaultCard: document.querySelector("#vault-card"),
   vaultSelect: document.querySelector("#vault-select"),
   refreshVaults: document.querySelector("#refresh-vaults"),
@@ -135,6 +136,7 @@ function renderCapture(capture) {
   elements.doi.textContent = capture.item.doi || "not_found";
   elements.source.textContent = capture.item.journal || capture.hostname || "unknown_source";
   elements.url.textContent = capture.item.url || "-";
+  elements.pdfUrl.textContent = capture.item.pdf_url || "not_detected";
   elements.rawPreview.textContent = JSON.stringify(
     {
       title: capture.item.title,
@@ -143,6 +145,7 @@ function renderCapture(capture) {
       journal: capture.item.journal,
       abstract: capture.item.abstract,
       publication_type: capture.item.publication_type,
+      pdf_url: capture.item.pdf_url,
       metadata_sources: capture.metadataSources,
     },
     null,
