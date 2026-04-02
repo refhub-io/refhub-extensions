@@ -35,7 +35,9 @@ body {
 
 .popup-shell {
   width: 430px;
-  min-height: 620px;
+  height: 580px;
+  display: flex;
+  flex-direction: column;
 }
 
 .options-shell {
@@ -49,6 +51,22 @@ body {
 
 .panel-popup {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 85, 247, 0.3) transparent;
+}
+
+.panel-footer {
+  flex-shrink: 0;
 }
 
 .panel-popup::before,
@@ -75,6 +93,10 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.actions {
+  padding-top: 12px;
 }
 
 .panel-header h1,
@@ -119,7 +141,7 @@ body {
 
 .banner {
   padding: 12px 14px;
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .banner.success {

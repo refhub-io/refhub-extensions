@@ -14,7 +14,6 @@ const elements = {
   confidenceBadge: document.querySelector("#confidence-badge"),
   captureTitle: document.querySelector("#capture-title"),
   captureSubtitle: document.querySelector("#capture-subtitle"),
-  rawPreview: document.querySelector("#raw-preview"),
   pageType: document.querySelector("#field-page-type"),
   doi: document.querySelector("#field-doi"),
   source: document.querySelector("#field-source"),
@@ -137,20 +136,6 @@ function renderCapture(capture) {
   elements.source.textContent = capture.item.journal || capture.hostname || "unknown_source";
   elements.url.textContent = capture.item.url || "-";
   elements.pdfUrl.textContent = capture.item.pdf_url || "not_detected";
-  elements.rawPreview.textContent = JSON.stringify(
-    {
-      title: capture.item.title,
-      authors: capture.item.authors,
-      year: capture.item.year,
-      journal: capture.item.journal,
-      abstract: capture.item.abstract,
-      publication_type: capture.item.publication_type,
-      pdf_url: capture.item.pdf_url,
-      metadata_sources: capture.metadataSources,
-    },
-    null,
-    2,
-  );
   syncSaveButton();
 }
 
@@ -218,8 +203,14 @@ async function saveCapture() {
 
     const vault = writableVaults.find((entry) => entry.id === vaultId);
     const vaultLabel = vault ? `saved_to ${vault.name}` : "saved_to_refhub";
-    const storedToDrive = response.response?.data?.[0]?.pdf_storage?.stored;
-    showBanner(storedToDrive ? `${vaultLabel} • pdf_sent_to_drive` : vaultLabel, "success");
+    const pdfStorage = response.response?.data?.[0]?.pdf_storage;
+    let bannerText = vaultLabel;
+    if (pdfStorage?.stored) {
+      bannerText += " • pdf_sent_to_drive";
+    } else if (pdfStorage?.attempted && pdfStorage?.message) {
+      bannerText += ` • drive_failed: ${pdfStorage.message}`;
+    }
+    showBanner(bannerText, pdfStorage?.attempted && !pdfStorage?.stored ? "error" : "success");
     if (response.openUrl) {
       await browserApi.tabs.create({ url: response.openUrl });
     }

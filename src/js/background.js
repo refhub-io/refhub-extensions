@@ -71,6 +71,12 @@ async function extractCurrentTab() {
     throw new Error("Only http(s) pages are supported by this prototype.");
   }
 
+  // Native PDF viewer tabs have no accessible DOM — scripting.executeScript would
+  // fail or return nothing useful. Use the tab URL itself as the pdf_url.
+  if (/\.pdf(\?[^#]*)?(#.*)?$/i.test(tab.url)) {
+    return normalizePdfTabCapture(tab);
+  }
+
   const [{ result: raw }] = await browserApi.scripting.executeScript({
     target: { tabId: tab.id },
     func: extractPageMetadata,
@@ -81,6 +87,31 @@ async function extractCurrentTab() {
     normalized.blockReason = normalized.blockReason || "This page type is not supported yet.";
   }
   return normalized;
+}
+
+function normalizePdfTabCapture(tab) {
+  const url = sanitizeUrl(tab.url);
+  const title = tab.title || url.split("/").pop().replace(/\.pdf$/i, "") || "Untitled PDF";
+  const doi = normalizeDoi(detectDoi(url));
+  const hostname = getHostname(url);
+
+  const item = compactObject({
+    title,
+    url,
+    doi,
+    pdf_url: url,
+    publication_type: "article",
+  });
+
+  return {
+    item,
+    hostname,
+    pageType: "pdf-direct",
+    confidence: 0.4,
+    metadataSources: ["url"],
+    saveable: true,
+    blockReason: "",
+  };
 }
 
 async function saveItem(payload) {
@@ -95,7 +126,7 @@ async function saveItem(payload) {
     throw new Error("The captured item is missing a title.");
   }
 
-  const driveStatus = await getGoogleDriveStatus(false).catch(() => ({
+  const driveStatus = await getGoogleDriveStatus(true).catch(() => ({
     linked: false,
     folder_status: "unlinked",
     folder_name: null,
@@ -231,7 +262,8 @@ function normalizeCapture(raw) {
   const year = extractYear(publicationDate);
   const journal = firstNonEmpty(citation.journal, jsonLd.journal, generic.siteName, openGraph.siteName, hostname);
   const abstract = firstNonEmpty(citation.abstract, jsonLd.abstract, openGraph.description, generic.description);
-  const pdfUrl = sanitizeUrl(firstNonEmpty(citation.pdfUrl, generic.pdfUrl, raw.pdfLink));
+  const pageBase = sanitizeUrl(raw.canonicalUrl || raw.url || "");
+  const pdfUrl = sanitizeUrl(firstNonEmpty(citation.pdfUrl, generic.pdfUrl, raw.pdfLink), pageBase);
   const pageType = detectPageType({ url, doi, citation, jsonLd, raw });
   const publicationType = pageType === "generic-webpage" ? "webpage" : "article";
   const confidence = scoreConfidence({ pageType, doi, authors, journal, year, raw });
@@ -311,9 +343,6 @@ function collectMetadataSources({ doi, citation, jsonLd, openGraph, generic, raw
 }
 
 function detectPageType({ url, doi, citation, jsonLd, raw }) {
-  if (/\.pdf($|\?)/i.test(url)) {
-    return "unsupported";
-  }
   if (/\barxiv\.org\b|\bbiorxiv\.org\b|\bmedrxiv\.org\b/i.test(url)) {
     return "preprint";
   }
@@ -434,12 +463,12 @@ function extractYear(value) {
   return match ? Number(match[0]) : undefined;
 }
 
-function sanitizeUrl(value) {
+function sanitizeUrl(value, base) {
   if (!value) {
     return "";
   }
   try {
-    const parsed = new URL(value, globalThis.location?.href || undefined);
+    const parsed = new URL(value, base || globalThis.location?.href || undefined);
     const trackingParams = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid"];
     for (const key of trackingParams) {
       parsed.searchParams.delete(key);
@@ -628,23 +657,29 @@ function extractPageMetadata() {
   function detectPdfLink() {
     const anchors = Array.from(document.querySelectorAll("a[href]"));
 
-    // Priority 1: href that directly ends with .pdf (possibly with a query string or fragment)
+    // Priority 1: href directly ends with .pdf
     const directPdf = anchors.find((a) => /\.pdf(\?[^#]*)?(#.*)?$/i.test(a.href));
     if (directPdf) {
       return directPdf.href;
     }
 
-    // Priority 2: anchor whose visible text, title attribute, or class name strongly
-    // signals a PDF full-text link, the way Zotero looks for "Download PDF" links
-    const pdfPattern = /\bpdf\b|\bfull[\s.\-_]?text\b/i;
-    const pdfAnchor = anchors.find((a) => {
+    // Priority 2: href contains a PDF-specific path segment used by major publishers
+    // e.g. ACM /doi/pdf/, Wiley /doi/pdfdirect/, Elsevier /pdfft, Springer /content/pdf/
+    const pathPdf = anchors.find((a) => /\/(e?pdf)(direct|ft|viewer)?[/?]/i.test(a.href) || /\/content\/pdf\//i.test(a.href));
+    if (pathPdf) {
+      return pathPdf.href;
+    }
+
+    // Priority 3: anchor label signals a PDF link AND the href also contains "pdf"
+    // Requiring both prevents grabbing "View HTML full text" or nav items with pdf CSS classes
+    const labelPattern = /\bpdf\b|\bfull[\s.\-_]?text\b/i;
+    const labelPdf = anchors.find((a) => {
       const text = (a.textContent || "").trim();
-      const title = (a.getAttribute("title") || "").trim();
-      const cls = (a.className || "");
-      return pdfPattern.test(text) || pdfPattern.test(title) || pdfPattern.test(cls);
+      const title = (a.getAttribute("title") || a.getAttribute("aria-label") || "").trim();
+      return (labelPattern.test(text) || labelPattern.test(title)) && /pdf/i.test(a.href);
     });
-    if (pdfAnchor) {
-      return pdfAnchor.href;
+    if (labelPdf) {
+      return labelPdf.href;
     }
 
     return "";
