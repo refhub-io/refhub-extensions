@@ -231,11 +231,11 @@ function normalizeCapture(raw) {
   const year = extractYear(publicationDate);
   const journal = firstNonEmpty(citation.journal, jsonLd.journal, generic.siteName, openGraph.siteName, hostname);
   const abstract = firstNonEmpty(citation.abstract, jsonLd.abstract, openGraph.description, generic.description);
-  const pdfUrl = sanitizeUrl(firstNonEmpty(citation.pdfUrl, generic.pdfUrl));
+  const pdfUrl = sanitizeUrl(firstNonEmpty(citation.pdfUrl, generic.pdfUrl, raw.pdfLink));
   const pageType = detectPageType({ url, doi, citation, jsonLd, raw });
   const publicationType = pageType === "generic-webpage" ? "webpage" : "article";
   const confidence = scoreConfidence({ pageType, doi, authors, journal, year, raw });
-  const metadataSources = collectMetadataSources({ doi, citation, jsonLd, openGraph, generic, raw });
+  const metadataSources = collectMetadataSources({ doi, citation, jsonLd, openGraph, generic, raw, pdfUrl });
 
   const item = compactObject({
     title,
@@ -284,7 +284,7 @@ function evaluateSaveability({ item, pageType }) {
   };
 }
 
-function collectMetadataSources({ doi, citation, jsonLd, openGraph, generic, raw }) {
+function collectMetadataSources({ doi, citation, jsonLd, openGraph, generic, raw, pdfUrl }) {
   const sources = [];
   if (doi) {
     sources.push("doi");
@@ -303,6 +303,9 @@ function collectMetadataSources({ doi, citation, jsonLd, openGraph, generic, raw
   }
   if (raw.canonicalUrl) {
     sources.push("canonical");
+  }
+  if (pdfUrl && raw.pdfLink && pdfUrl === sanitizeUrl(raw.pdfLink)) {
+    sources.push("pdf_link");
   }
   return sources;
 }
@@ -535,6 +538,7 @@ function extractPageMetadata() {
     language: document.documentElement.lang || "",
     meta: normalizeMetaBuckets(meta),
     structuredData: extractStructuredData(),
+    pdfLink: detectPdfLink(),
   };
 
   function appendMetaValue(bucket, key, value) {
@@ -619,5 +623,30 @@ function extractPageMetadata() {
       }
     }
     return values;
+  }
+
+  function detectPdfLink() {
+    const anchors = Array.from(document.querySelectorAll("a[href]"));
+
+    // Priority 1: href that directly ends with .pdf (possibly with a query string or fragment)
+    const directPdf = anchors.find((a) => /\.pdf(\?[^#]*)?(#.*)?$/i.test(a.href));
+    if (directPdf) {
+      return directPdf.href;
+    }
+
+    // Priority 2: anchor whose visible text, title attribute, or class name strongly
+    // signals a PDF full-text link, the way Zotero looks for "Download PDF" links
+    const pdfPattern = /\bpdf\b|\bfull[\s.\-_]?text\b/i;
+    const pdfAnchor = anchors.find((a) => {
+      const text = (a.textContent || "").trim();
+      const title = (a.getAttribute("title") || "").trim();
+      const cls = (a.className || "");
+      return pdfPattern.test(text) || pdfPattern.test(title) || pdfPattern.test(cls);
+    });
+    if (pdfAnchor) {
+      return pdfAnchor.href;
+    }
+
+    return "";
   }
 }
