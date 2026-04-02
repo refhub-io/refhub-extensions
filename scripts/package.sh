@@ -7,8 +7,20 @@ DIST_DIR="$ROOT_DIR/dist"
 # Read version from package.json
 VERSION=$(node -p "require('$ROOT_DIR/package.json').version" 2>/dev/null || echo "0.0.0")
 
-CHROME_ZIP="$ROOT_DIR/refhub-chrome-$VERSION.zip"
-FIREFOX_ZIP="$ROOT_DIR/refhub-firefox-$VERSION.zip"
+# --local  →  point at http://localhost:8888 (dev backend)
+LOCAL=0
+for arg in "$@"; do [[ "$arg" == "--local" ]] && LOCAL=1; done
+
+if [[ $LOCAL -eq 1 ]]; then
+  export REFHUB_API_BASE_URL="http://localhost:8888"
+  export REFHUB_ALLOW_CUSTOM_URLS="1"
+  ZIP_SUFFIX="-local"
+else
+  ZIP_SUFFIX=""
+fi
+
+CHROME_ZIP="$ROOT_DIR/refhub-chrome-$VERSION${ZIP_SUFFIX}.zip"
+FIREFOX_ZIP="$ROOT_DIR/refhub-firefox-$VERSION${ZIP_SUFFIX}.zip"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -26,7 +38,8 @@ make_zip() {
 
 # ── build ─────────────────────────────────────────────────────────────────────
 
-info "Building extension (v$VERSION)..."
+API_TARGET="${REFHUB_API_BASE_URL:-https://refhub-api.netlify.app}"
+info "Building extension (v$VERSION) → $API_TARGET"
 cd "$ROOT_DIR"
 node scripts/build.mjs
 

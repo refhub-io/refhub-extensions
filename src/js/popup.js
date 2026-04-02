@@ -174,7 +174,7 @@ function renderVaults(vaults, lastVaultId) {
 
   elements.vaultSelect.replaceChildren(fragment);
   elements.vaultSelect.disabled = false;
-  elements.vaultHint.textContent = "// public vaults open at /public/:slug • private/shared vaults open at /vault/:id";
+  elements.vaultHint.textContent = "// vault route: /vault/:id";
   syncSaveButton();
 }
 
@@ -207,10 +207,10 @@ async function saveCapture() {
     let bannerText = vaultLabel;
     if (pdfStorage?.stored) {
       bannerText += " • pdf_sent_to_drive";
-    } else if (pdfStorage?.attempted && pdfStorage?.message) {
-      bannerText += ` • drive_failed: ${pdfStorage.message}`;
+    } else if (pdfStorage?.attempted) {
+      bannerText += ` • ${driveFailureNote(pdfStorage.message)}`;
     }
-    showBanner(bannerText, pdfStorage?.attempted && !pdfStorage?.stored ? "error" : "success");
+    showBanner(bannerText, "success");
     if (response.openUrl) {
       await browserApi.tabs.create({ url: response.openUrl });
     }
@@ -220,6 +220,14 @@ async function saveCapture() {
     elements.saveButton.textContent = "save_to_refhub";
     syncSaveButton();
   }
+}
+
+function driveFailureNote(message) {
+  const msg = message || "";
+  if (/\b(401|403)\b/.test(msg)) return "pdf_access_denied";
+  if (/\b404\b/.test(msg)) return "pdf_not_found";
+  if (/confirm.*pdf|not.*pdf/i.test(msg)) return "pdf_unconfirmed";
+  return "pdf_not_saved_to_drive";
 }
 
 function syncSaveButton() {
