@@ -42,6 +42,9 @@ export const browserApi = {
     query: wrapMaybePromise(browserLike.tabs, "query"),
     create: wrapMaybePromise(browserLike.tabs, "create"),
   },
+  cookies: {
+    getAll: wrapMaybePromise(browserLike.cookies, "getAll"),
+  },
   scripting: {
     executeScript: wrapMaybePromise(browserLike.scripting, "executeScript"),
   },

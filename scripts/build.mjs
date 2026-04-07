@@ -96,7 +96,7 @@ function createBaseManifest() {
       type: "module",
     },
     options_page: "options.html",
-    permissions: ["activeTab", "storage", "scripting"],
+    permissions: ["activeTab", "storage", "scripting", "cookies"],
     host_permissions: buildHostPermissions(),
     web_accessible_resources: [
       {
@@ -139,9 +139,5 @@ function createFirefoxManifest() {
 }
 
 function buildHostPermissions() {
-  if (buildDefaults.allowCustomUrls) {
-    return ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"];
-  }
-
-  return [`${buildDefaults.apiBaseUrl}/*`];
+  return ["https://*/*", "http://*/*"];
 }

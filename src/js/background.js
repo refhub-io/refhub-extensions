@@ -1,7 +1,9 @@
 import { browserApi } from "./browser-api.js";
 import { loadConfig, saveConfig } from "./storage.js";
+import { findTranslator, isPdfWrapper, isPdfBinary, resolveLandingUrl, resolvePdfDownloadUrl } from "./translators/index.js";
 
 const runtimeApi = globalThis.browser ?? globalThis.chrome;
+const MAX_FORWARDED_COOKIE_BYTES = 12 * 1024;
 
 const vaultCache = {
   data: null,
@@ -73,8 +75,26 @@ async function extractCurrentTab() {
 
   // Native PDF viewer tabs have no accessible DOM — scripting.executeScript would
   // fail or return nothing useful. Use the tab URL itself as the pdf_url.
-  if (/\.pdf(\?[^#]*)?(#.*)?$/i.test(tab.url)) {
-    return normalizePdfTabCapture(tab);
+  if (isPdfWrapper(tab.url)) {
+    const [{ result: raw }] = await browserApi.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: extractPageMetadata,
+    });
+
+    // Publisher-specific enrichment for wrapper pages (e.g. ACM two-step metadata fetch).
+    const translator = findTranslator(tab.url);
+    if (translator.enrichWrapper) {
+      await translator.enrichWrapper(raw, tab, browserApi);
+    }
+
+    const normalized = normalizeCapture(raw);
+    normalized.sourceTabId = tab.id;
+    normalized.sourceTabUrl = tab.url;
+    return enrichPdfWrapperCapture(await loadConfig(), normalized, tab.url);
+  }
+
+  if (isPdfBinary(tab.url)) {
+    return enrichPdfTabCapture(await loadConfig(), normalizePdfTabCapture(tab));
   }
 
   const [{ result: raw }] = await browserApi.scripting.executeScript({
@@ -82,7 +102,15 @@ async function extractCurrentTab() {
     func: extractPageMetadata,
   });
 
+  // Publisher-specific enrichment for landing pages (e.g. IEEE xplGlobal, Elsevier DOM authors).
+  const landingTranslator = findTranslator(tab.url);
+  if (landingTranslator.enrichCapture) {
+    await landingTranslator.enrichCapture(raw, tab, browserApi);
+  }
+
   const normalized = normalizeCapture(raw);
+  normalized.sourceTabId = tab.id;
+  normalized.sourceTabUrl = tab.url;
   if (!normalized.saveable && normalized.pageType === "unsupported") {
     normalized.blockReason = normalized.blockReason || "This page type is not supported yet.";
   }
@@ -111,14 +139,206 @@ function normalizePdfTabCapture(tab) {
     metadataSources: ["url"],
     saveable: true,
     blockReason: "",
+    sourceTabId: tab.id,
+    sourceTabUrl: url,
+    sourcePageUrl: url,
   };
+}
+
+async function enrichPdfTabCapture(config, capture) {
+  const pdfMetadata = await fetchPdfMetadata(config, capture.item?.pdf_url, capture.sourcePageUrl);
+  return mergeCaptureWithPdfMetadata(capture, pdfMetadata);
+}
+
+async function enrichPdfWrapperCapture(config, capture, wrapperUrl) {
+  // Resolve URLs via the publisher translator for this domain.
+  const rawPdfUrl = firstNonEmpty(capture.item?.pdf_url, wrapperUrl);
+  // The download URL is what the server (or browser) actually fetches — for
+  // publishers like Wiley this converts /epdf/ → /pdfdirect/ so the server
+  // receives a real PDF binary instead of an HTML viewer page.
+  const pdfDownloadUrl = resolvePdfDownloadUrl(rawPdfUrl);
+  // Landing URL: the article abstract/full-text page used for metadata scraping.
+  const landingUrl = firstNonEmpty(resolveLandingUrl(rawPdfUrl), resolveLandingUrl(wrapperUrl));
+
+  let nextCapture = {
+    ...capture,
+    pageType: "pdf-wrapper",
+    item: compactObject({
+      ...capture.item,
+      url: firstNonEmpty(landingUrl, capture.item?.url, wrapperUrl),
+      pdf_url: pdfDownloadUrl,
+      publication_type: "article",
+    }),
+    sourcePageUrl: firstNonEmpty(landingUrl, capture.sourcePageUrl, wrapperUrl),
+  };
+
+  if (landingUrl) {
+    // Prefer injecting into the open tab: same-origin fetch → no CORS restriction.
+    // Fall back to a background fetch for cases where scripting is unavailable.
+    const pageMetadata = capture.sourceTabId
+      ? await fetchPageMetadataFromTabContext(capture.sourceTabId, landingUrl).catch(() => null)
+          || await fetchPageMetadataFromUrl(landingUrl).catch(() => null)
+      : await fetchPageMetadataFromUrl(landingUrl).catch(() => null);
+    nextCapture = mergeCaptureWithPageMetadata(nextCapture, pageMetadata, landingUrl);
+  }
+
+  const pdfMetadata = await fetchPdfMetadata(config, pdfDownloadUrl, firstNonEmpty(landingUrl, wrapperUrl));
+  return mergeCaptureWithPdfMetadata(nextCapture, pdfMetadata);
+}
+
+async function fetchPageMetadataFromTabContext(tabId, url) {
+  const [{ result }] = await browserApi.scripting.executeScript({
+    target: { tabId },
+    args: [url],
+    world: "MAIN",
+    func: fetchHtmlFromPageContext,
+  });
+  if (!result?.ok || !result.html) {
+    return null;
+  }
+  return extractMetadataFromHtml(result.html, result.finalUrl || url);
+}
+
+// Runs inside the page context — must be self-contained (no closure over background scope).
+function fetchHtmlFromPageContext(targetUrl) {
+  return fetch(targetUrl, {
+    credentials: "include",
+    redirect: "follow",
+    headers: { accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
+  })
+    .then((r) => {
+      if (!r.ok) return { ok: false };
+      return r.text().then((html) => {
+        // Cloudflare managed-challenge pages sometimes return HTTP 200 with a
+        // JS-challenge body.  Detect them and treat as a fetch failure so we
+        // don't try to parse the challenge HTML as article metadata.
+        const isCfChallenge =
+          /<title>Just a moment\.\.\.<\/title>/i.test(html) ||
+          /cf-browser-verification|cf_chl_opt/i.test(html);
+        if (isCfChallenge) return { ok: false, message: "cf_challenge" };
+        return { ok: true, html, finalUrl: r.url };
+      });
+    })
+    .catch((err) => ({ ok: false, message: err.message }));
+}
+
+
+async function fetchPageMetadataFromUrl(url) {
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+      redirect: "follow",
+      headers: {
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!/html|xml/i.test(contentType)) {
+      return null;
+    }
+
+    const html = await response.text();
+    return extractMetadataFromHtml(html, response.url || url);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchPdfMetadata(config, pdfUrl, referer = "") {
+  if (!pdfUrl) {
+    return null;
+  }
+
+  // URLs with hmac tokens are session+IP-bound (ACM pdfdirect, Wiley pdfdirect)
+  // and cannot be fetched server-side — the backend would get 403.  Skip the
+  // round-trip; metadata comes from page context extraction instead.
+  if (/[?&]hmac=/i.test(pdfUrl)) {
+    return null;
+  }
+
+  try {
+    const response = await apiRequest(config, "/api/v1/pdf-metadata", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source_url: pdfUrl,
+        cookie_header: (await buildCookieHeader(pdfUrl)) || undefined,
+        referer: referer || undefined,
+      }),
+    });
+    return response?.data || null;
+  } catch {
+    return null;
+  }
+}
+
+function mergeCaptureWithPageMetadata(capture, pageMetadata, landingUrl) {
+  if (!pageMetadata) {
+    return capture;
+  }
+
+  return {
+    ...capture,
+    confidence: Math.max(capture.confidence || 0, 0.7),
+    metadataSources: uniqueStrings([...(capture.metadataSources || []), "landing_page"]),
+    item: compactObject({
+      title: firstNonEmpty(pageMetadata.title, capture.item?.title),
+      authors: uniqueStrings([...(pageMetadata.authors || []), ...(capture.item?.authors || [])]),
+      year: pageMetadata.year || capture.item?.year,
+      journal: firstNonEmpty(pageMetadata.journal, capture.item?.journal),
+      doi: firstNonEmpty(pageMetadata.doi, capture.item?.doi),
+      url: firstNonEmpty(landingUrl, pageMetadata.url, capture.item?.url),
+      abstract: firstNonEmpty(pageMetadata.abstract, capture.item?.abstract),
+      publication_type: firstNonEmpty(capture.item?.publication_type, "article"),
+      pdf_url: firstNonEmpty(capture.item?.pdf_url, pageMetadata.pdf_url),
+    }),
+  };
+}
+
+function mergeCaptureWithPdfMetadata(capture, pdfMetadata) {
+  if (!pdfMetadata) {
+    return capture;
+  }
+
+  const doi = normalizeDoi(firstNonEmpty(pdfMetadata.doi, capture.item?.doi));
+  const title = prefersPdfTitle(capture.item?.title) ? firstNonEmpty(pdfMetadata.title, capture.item?.title) : firstNonEmpty(capture.item?.title, pdfMetadata.title);
+  const authors = uniqueStrings([...(pdfMetadata.authors?.length ? pdfMetadata.authors : []), ...(capture.item?.authors || [])]);
+  const year = pdfMetadata.year || capture.item?.year;
+  const journal = firstNonEmpty(pdfMetadata.journal, capture.item?.journal);
+  return {
+    ...capture,
+    confidence: Math.max(capture.confidence || 0, doi ? 0.72 : capture.confidence || 0),
+    metadataSources: uniqueStrings([...(capture.metadataSources || []), "pdf_first_page"]),
+    item: compactObject({
+      title,
+      authors,
+      year,
+      journal,
+      doi,
+      url: capture.item?.url,
+      abstract: capture.item?.abstract,
+      publication_type: capture.item?.publication_type,
+      pdf_url: capture.item?.pdf_url,
+    }),
+  };
+}
+
+function prefersPdfTitle(title) {
+  const value = String(title || "").trim();
+  return !value || /^(untitled pdf|ieee xplore full-text pdf:?|full[-\s]?text pdf:?|pdf)$/i.test(value);
 }
 
 async function saveItem(payload) {
   const config = await loadConfig();
   assertConfigured(config);
 
-  const { vaultId, item } = payload || {};
+  const { vaultId, item, captureContext } = payload || {};
   if (!vaultId) {
     throw new Error("A target vault is required.");
   }
@@ -141,7 +361,7 @@ async function saveItem(payload) {
 
   const savedItemId = response.data?.[0]?.id;
   if (item.pdf_url && driveStatus.linked && savedItemId) {
-    pdfStorage = await fetchAndUploadPdf(config, vaultId, savedItemId, item.pdf_url);
+    pdfStorage = await fetchAndUploadPdf(config, vaultId, savedItemId, resolvePdfDownloadUrl(item.pdf_url), captureContext);
   }
 
   const responseWithPdf = {
@@ -156,44 +376,185 @@ async function saveItem(payload) {
   };
 }
 
-async function fetchAndUploadPdf(config, vaultId, vaultPublicationId, pdfUrl) {
+async function fetchAndUploadPdf(config, vaultId, vaultPublicationId, pdfUrl, captureContext) {
   try {
-    const pdfResponse = await fetch(pdfUrl, {
+    const pdfData = await fetchPdfBytes(pdfUrl, captureContext);
+    return uploadPdfBytes(config, vaultId, vaultPublicationId, pdfData, pdfUrl);
+  } catch (error) {
+    return uploadPdfBySourceUrl(config, vaultId, vaultPublicationId, pdfUrl, captureContext, error.message);
+  }
+}
+
+async function uploadPdfBytes(config, vaultId, vaultPublicationId, pdfData, originalPdfUrl) {
+  const uploadResponse = await fetch(
+    `${config.apiBaseUrl}/api/v1/vaults/${encodeURIComponent(vaultId)}/items/${encodeURIComponent(vaultPublicationId)}/pdf`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/pdf",
+      },
+      body: pdfData.bytes,
+    },
+  );
+
+  const data = await uploadResponse.json().catch(() => ({}));
+  if (!uploadResponse.ok) {
+    return {
+      attempted: true,
+      stored: false,
+      message: data?.error?.message || `Drive upload failed (${uploadResponse.status}).`,
+    };
+  }
+
+  return {
+    attempted: true,
+    stored: true,
+    source_url: pdfData.finalUrl || originalPdfUrl,
+    fetch_strategy: pdfData.strategy,
+    ...data.data,
+  };
+}
+
+async function uploadPdfBySourceUrl(config, vaultId, vaultPublicationId, pdfUrl, captureContext, fetchFailureMessage) {
+  const cookieHeader = await buildCookieHeader(pdfUrl);
+  const referer = captureContext?.sourcePageUrl || captureContext?.sourceTabUrl || "";
+  const uploadResponse = await fetch(
+    `${config.apiBaseUrl}/api/v1/vaults/${encodeURIComponent(vaultId)}/items/${encodeURIComponent(vaultPublicationId)}/pdf`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        source_url: pdfUrl,
+        cookie_header: cookieHeader || undefined,
+        referer: referer || undefined,
+      }),
+    },
+  );
+
+  const data = await uploadResponse.json().catch(() => ({}));
+  if (!uploadResponse.ok) {
+    const backendMessage = data?.error?.message || `Drive upload failed (${uploadResponse.status}).`;
+    return {
+      attempted: true,
+      stored: false,
+      message: fetchFailureMessage ? `${fetchFailureMessage} ${backendMessage}` : backendMessage,
+    };
+  }
+
+  return {
+    attempted: true,
+    stored: true,
+    source_url: pdfUrl,
+    fetch_strategy: "backend-source-url",
+    browser_fetch_failed: Boolean(fetchFailureMessage),
+    ...data.data,
+  };
+}
+
+async function fetchPdfBytes(pdfUrl, captureContext) {
+  const pageResult = await tryPageContextPdfFetch(pdfUrl, captureContext);
+  if (pageResult?.ok) {
+    return pageResult;
+  }
+
+  try {
+    return await fetchPdfFromExtension(pdfUrl);
+  } catch (error) {
+    const reasons = [pageResult?.message, error.message].filter(Boolean);
+    throw new Error(reasons[0] === reasons[1] ? reasons[0] : reasons.join(" "));
+  }
+}
+
+async function tryPageContextPdfFetch(pdfUrl, captureContext) {
+  const tabId = captureContext?.sourceTabId;
+  const sourcePageUrl = captureContext?.sourcePageUrl || captureContext?.sourceTabUrl || "";
+  if (!tabId || !isSameOrigin(sourcePageUrl, pdfUrl)) {
+    return null;
+  }
+
+  try {
+    const [{ result }] = await browserApi.scripting.executeScript({
+      target: { tabId },
+      args: [pdfUrl],
+      world: "MAIN",
+      func: fetchPdfFromPageContext,
+    });
+
+    if (!result?.ok) {
+      return { ok: false, message: result?.message || "Page-context PDF fetch failed." };
+    }
+
+    return {
+      ok: true,
+      bytes: result.bytes,
+      finalUrl: result.finalUrl || pdfUrl,
+      strategy: "page-context",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: `Page-context PDF fetch failed. ${error.message}`,
+    };
+  }
+}
+
+async function fetchPdfFromExtension(pdfUrl) {
+  const pdfResponse = await fetch(pdfUrl, {
+    method: "GET",
+    credentials: "include",
+    redirect: "follow",
+  });
+
+  if (!pdfResponse.ok) {
+    throw new Error(`Background PDF fetch failed (${pdfResponse.status}).`);
+  }
+
+  const contentType = pdfResponse.headers.get("content-type") || "";
+  const finalUrl = pdfResponse.url || pdfUrl;
+  if (!looksLikePdf(contentType, finalUrl)) {
+    throw new Error("Background PDF fetch did not return a PDF.");
+  }
+
+  return {
+    ok: true,
+    bytes: await pdfResponse.arrayBuffer(),
+    finalUrl,
+    strategy: "background-fetch",
+  };
+}
+
+async function fetchPdfFromPageContext(targetUrl) {
+  const looksLikePdf = (contentType, url) =>
+    /application\/pdf/i.test(contentType || "") || /\.pdf(\?[^#]*)?(#.*)?$/i.test(url || "");
+
+  try {
+    const response = await fetch(targetUrl, {
       method: "GET",
       credentials: "include",
       redirect: "follow",
     });
 
-    if (!pdfResponse.ok) {
-      return { attempted: true, stored: false, message: `Failed to fetch PDF (${pdfResponse.status}).` };
+    if (!response.ok) {
+      return { ok: false, message: `Page-context PDF fetch failed (${response.status}).` };
     }
 
-    const arrayBuffer = await pdfResponse.arrayBuffer();
-
-    const uploadResponse = await fetch(
-      `${config.apiBaseUrl}/api/v1/vaults/${encodeURIComponent(vaultId)}/items/${encodeURIComponent(vaultPublicationId)}/pdf`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          "Content-Type": "application/pdf",
-        },
-        body: arrayBuffer,
-      },
-    );
-
-    const data = await uploadResponse.json().catch(() => ({}));
-    if (!uploadResponse.ok) {
-      return {
-        attempted: true,
-        stored: false,
-        message: data?.error?.message || `Drive upload failed (${uploadResponse.status}).`,
-      };
+    const contentType = response.headers.get("content-type") || "";
+    const finalUrl = response.url || targetUrl;
+    if (!looksLikePdf(contentType, finalUrl)) {
+      return { ok: false, message: "Page-context fetch did not return a PDF." };
     }
 
-    return { attempted: true, stored: true, ...data.data };
+    return {
+      ok: true,
+      bytes: await response.arrayBuffer(),
+      finalUrl,
+    };
   } catch (error) {
-    return { attempted: true, stored: false, message: error.message };
+    return { ok: false, message: `Page-context PDF fetch failed. ${error.message}` };
   }
 }
 
@@ -267,8 +628,13 @@ function normalizeCapture(raw) {
   const generic = raw.meta.generic || {};
   const openGraph = raw.meta.openGraph || {};
   const jsonLd = pickPreferredStructuredData(raw.structuredData);
+  // publisherData is set by translator.enrichCapture (landing pages) or
+  // translator.enrichWrapper (PDF viewer pages) when publisher-specific
+  // extraction is needed (e.g. IEEE xplGlobal, ACM metadata API, Elsevier DOM).
+  const pd = raw.publisherData || null;
 
   const title = firstNonEmpty(
+    pd?.title,           // publisher-specific: clean title (no site/proceedings suffix)
     citation.title,
     jsonLd.headline,
     jsonLd.name,
@@ -277,15 +643,21 @@ function normalizeCapture(raw) {
     raw.documentTitle,
   );
 
-  const authors = uniqueStrings([
-    ...arrayify(citation.authors),
-    ...arrayify(jsonLd.authors),
-    ...arrayify(generic.authors),
-    ...arrayify(openGraph.authors),
-  ]);
+  // When the publisher provides authors, use them exclusively — mixing in
+  // generic/OG/citation sources can contaminate the list with strings like
+  // "View Profile" or "ACM Conferences" (from site-level meta tags).
+  const authors = pd?.authors?.length
+    ? uniqueStrings(pd.authors)
+    : uniqueStrings([
+        ...arrayify(citation.authors),
+        ...arrayify(jsonLd.authors),
+        ...arrayify(generic.authors),
+        ...arrayify(openGraph.authors),
+      ]);
 
   const doi = normalizeDoi(
     firstNonEmpty(
+      pd?.doi,
       citation.doi,
       jsonLd.doi,
       generic.doi,
@@ -294,19 +666,11 @@ function normalizeCapture(raw) {
     ),
   );
 
-  const publicationDate = firstNonEmpty(
-    citation.publicationDate,
-    citation.onlineDate,
-    jsonLd.datePublished,
-    generic.publicationDate,
-    openGraph.publishedTime,
-  );
-
-  const year = extractYear(publicationDate);
-  const journal = firstNonEmpty(citation.journal, jsonLd.journal, generic.siteName, openGraph.siteName, hostname);
-  const abstract = firstNonEmpty(citation.abstract, jsonLd.abstract, openGraph.description, generic.description);
+  const journal = firstNonEmpty(pd?.journal, citation.journal, jsonLd.journal, generic.siteName, openGraph.siteName, hostname);
+  const year = extractYear(firstNonEmpty(pd?.year?.toString(), citation.publicationDate, citation.onlineDate, jsonLd.datePublished, generic.publicationDate, openGraph.publishedTime));
+  const abstract = firstNonEmpty(pd?.abstract, citation.abstract, jsonLd.abstract, openGraph.description, generic.description);
   const pageBase = sanitizeUrl(raw.canonicalUrl || raw.url || "");
-  const pdfUrl = sanitizeUrl(firstNonEmpty(citation.pdfUrl, generic.pdfUrl, raw.pdfLink), pageBase);
+  const pdfUrl = sanitizeUrl(firstNonEmpty(pd?.downloadUrl, citation.pdfUrl, generic.pdfUrl, raw.pdfLink), pageBase);
   const pageType = detectPageType({ url, doi, citation, jsonLd, raw });
   const publicationType = pageType === "generic-webpage" ? "webpage" : "article";
   const confidence = scoreConfidence({ pageType, doi, authors, journal, year, raw });
@@ -334,6 +698,7 @@ function normalizeCapture(raw) {
     metadataSources,
     saveable: saveability.saveable,
     blockReason: saveability.reason,
+    sourcePageUrl: raw.url || url,
   };
 }
 
@@ -390,10 +755,13 @@ function detectPageType({ url, doi, citation, jsonLd, raw }) {
     return "preprint";
   }
   const hasScholarlyMeta = Boolean(citation.title || citation.doi || citation.journal || jsonLd.isScholarly);
-  if (doi && hasScholarlyMeta) {
+  // publisherData being set means a translator enriched this page with structured
+  // scholarly data (e.g. IEEE xplGlobal, ACM metadata API, Elsevier DOM).
+  const hasPublisherData = Boolean(raw.publisherData?.doi || raw.publisherData?.authors?.length);
+  if (doi && (hasScholarlyMeta || hasPublisherData)) {
     return "doi-landing";
   }
-  if (hasScholarlyMeta) {
+  if (hasScholarlyMeta || hasPublisherData) {
     return "scholarly-article";
   }
   if (raw.meta.openGraph.title || raw.documentTitle) {
@@ -530,6 +898,96 @@ function getHostname(value) {
   }
 }
 
+
+async function buildCookieHeader(url) {
+  if (!browserApi.cookies?.getAll) {
+    return "";
+  }
+
+  try {
+    const cookies = await browserApi.cookies.getAll({ url });
+    const relevant = cookies
+      .filter((cookie) => cookie?.name)
+      .sort((left, right) => {
+        const leftLength = left.path?.length || 0;
+        const rightLength = right.path?.length || 0;
+        return rightLength - leftLength;
+      });
+
+    const parts = [];
+    let totalBytes = 0;
+    for (const cookie of relevant) {
+      const part = `${cookie.name}=${cookie.value}`;
+      const nextBytes = new TextEncoder().encode(parts.length ? `; ${part}` : part).length;
+      if (totalBytes + nextBytes > MAX_FORWARDED_COOKIE_BYTES) {
+        break;
+      }
+      parts.push(part);
+      totalBytes += nextBytes;
+    }
+
+    return parts.join("; ");
+  } catch {
+    return "";
+  }
+}
+
+function isSameOrigin(left, right) {
+  try {
+    return new URL(left).origin === new URL(right).origin;
+  } catch {
+    return false;
+  }
+}
+
+function looksLikePdf(contentType, url) {
+  return /application\/pdf/i.test(contentType || "") || /\.pdf(\?[^#]*)?(#.*)?$/i.test(url || "");
+}
+
+
+function extractMetadataFromHtml(html, baseUrl) {
+  const metaEntries = [...html.matchAll(/<meta\s+[^>]*(?:name|property)=["']([^"']+)["'][^>]*content=["']([^"']*)["'][^>]*>/gi)];
+  const map = new Map();
+  for (const [, rawKey, rawValue] of metaEntries) {
+    const key = rawKey.trim().toLowerCase();
+    const value = rawValue.trim();
+    if (!key || !value) {
+      continue;
+    }
+    const bucket = map.get(key) || [];
+    bucket.push(value);
+    map.set(key, bucket);
+  }
+
+  const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+  const doi = normalizeDoi(firstNonEmpty(pickMeta(map, "citation_doi"), pickMeta(map, "dc.identifier"), detectDoi(html), detectDoi(baseUrl)));
+
+  // ACM DL landing pages have no citation_author meta tags — authors are only
+  // in <a href="/profile/{id}">Name</a> anchor links on the abstract page.
+  const acmProfileAuthors = [...html.matchAll(/href="\/profile\/\d+"[^>]*>([^<]+)/g)]
+    .map((m) => m[1].trim())
+    .filter(Boolean);
+
+  return compactObject({
+    title: firstNonEmpty(pickMeta(map, "citation_title"), pickMeta(map, "og:title"), titleMatch?.[1] || ""),
+    authors: uniqueStrings([...metaList(map, "citation_author"), ...acmProfileAuthors]),
+    year: extractYear(firstNonEmpty(pickMeta(map, "citation_publication_date"), pickMeta(map, "article:published_time"), pickMeta(map, "dc.date"))),
+    journal: firstNonEmpty(pickMeta(map, "citation_journal_title"), pickMeta(map, "citation_conference_title"), pickMeta(map, "og:site_name")),
+    doi,
+    url: sanitizeUrl(firstNonEmpty(pickMeta(map, "citation_public_url"), pickMeta(map, "og:url"), baseUrl)),
+    abstract: firstNonEmpty(pickMeta(map, "citation_abstract"), pickMeta(map, "description"), pickMeta(map, "og:description")),
+    pdf_url: sanitizeUrl(firstNonEmpty(pickMeta(map, "citation_pdf_url")), baseUrl),
+  });
+}
+
+function pickMeta(map, key) {
+  return map.get(key)?.find(Boolean) || "";
+}
+
+function metaList(map, key) {
+  return map.get(key) || [];
+}
+
 function compactObject(object) {
   return Object.fromEntries(
     Object.entries(object).filter(([, value]) => {
@@ -603,6 +1061,29 @@ function extractPageMetadata() {
     appendMetaValue(meta.generic, key, value);
   }
 
+  // Cloud reader pages (ACM, Wiley): extract from window.readerConfig when available.
+  // Chrome's isolated world shares window with the page, so globalThis.readerConfig
+  // is accessible here. Firefox uses XRay wrappers — the translator enrichWrapper
+  // runs a separate MAIN-world executeScript to override this for Firefox.
+  // Authors are always left empty here; enrichWrapper fills them via metadata API.
+  let publisherData = null;
+  try {
+    const cfg = globalThis.readerConfig;
+    if (cfg && cfg.doi) {
+      const hmacRelUrl = cfg.epubConfig?.epubUrl || "";
+      const dlRelUrl = hmacRelUrl || cfg.epubActions?.download?.files?.pdf?.url || "";
+      publisherData = {
+        title: cfg.title || "",
+        doi: cfg.doi || "",
+        downloadUrl: dlRelUrl ? new URL(dlRelUrl, location.href).href : "",
+        authors: [],
+        abstract: "",
+      };
+    }
+  } catch {
+    // Not a cloud reader page, or readerConfig is malformed — ignore.
+  }
+
   return {
     url: location.href,
     canonicalUrl: document.querySelector('link[rel="canonical"]')?.href || "",
@@ -611,6 +1092,7 @@ function extractPageMetadata() {
     meta: normalizeMetaBuckets(meta),
     structuredData: extractStructuredData(),
     pdfLink: detectPdfLink(),
+    publisherData,
   };
 
   function appendMetaValue(bucket, key, value) {
@@ -698,6 +1180,20 @@ function extractPageMetadata() {
   }
 
   function detectPdfLink() {
+    const embeds = Array.from(document.querySelectorAll("iframe[src], embed[src], object[data]"));
+    const embeddedPdf = embeds.find((element) => {
+      const value = element.getAttribute("src") || element.getAttribute("data") || "";
+      return (
+        /\.pdf(\?[^#]*)?(#.*)?$/i.test(value) ||
+        /\/doi\/(e?pdf(direct)?|epdf)\//i.test(value) ||
+        /\/content\/pdf\//i.test(value) ||
+        /\/ielx?\d+\/.+\.pdf/i.test(value)
+      );
+    });
+    if (embeddedPdf) {
+      return embeddedPdf.getAttribute("src") || embeddedPdf.getAttribute("data") || "";
+    }
+
     const anchors = Array.from(document.querySelectorAll("a[href]"));
 
     // Priority 1: href directly ends with .pdf

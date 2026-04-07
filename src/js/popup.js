@@ -3,6 +3,8 @@ import { saveConfig } from "./storage.js";
 
 const elements = {
   banner: document.querySelector("#message-banner"),
+  overlay: document.querySelector("#loading-overlay"),
+  overlayLabel: document.querySelector("#overlay-label"),
   setupCard: document.querySelector("#setup-card"),
   setupButton: document.querySelector("#setup-button"),
   setupAppLink: document.querySelector("#setup-app-link"),
@@ -35,6 +37,7 @@ let currentCapture = null;
 let writableVaults = [];
 let currentConfig = null;
 let currentDriveStatus = null;
+let dotsTimer = null;
 
 document.querySelector("#setup-button").addEventListener("click", openOptions);
 elements.openOptions.addEventListener("click", openOptions);
@@ -78,6 +81,7 @@ async function bootstrap() {
 }
 
 async function extractCurrentTab() {
+  showOverlay("// extracting_metadata");
   elements.captureLoading.classList.remove("hidden");
   elements.captureContent.classList.add("hidden");
   elements.saveButton.disabled = true;
@@ -85,12 +89,36 @@ async function extractCurrentTab() {
   try {
     currentCapture = await sendRuntimeMessage({ type: "refhub:extract-current-tab" });
     renderCapture(currentCapture);
-    showBanner(currentCapture.saveable ? "metadata extracted • ready_to_save" : currentCapture.blockReason, currentCapture.saveable ? "success" : "error");
+    if (!currentCapture.saveable) {
+      showBanner(currentCapture.blockReason, "error");
+    } else if (currentCapture.warnings?.length) {
+      showBanner(`metadata extracted • ${currentCapture.warnings[0]}`, "warning");
+    } else {
+      showBanner("metadata extracted • ready_to_save", "success");
+    }
   } catch (error) {
     currentCapture = null;
     showBanner(error.message, "error");
     elements.captureLoading.textContent = "// could_not_extract_tab_metadata";
+  } finally {
+    hideOverlay();
   }
+}
+
+function showOverlay(label) {
+  let count = 0;
+  elements.overlayLabel.textContent = label;
+  elements.overlay.classList.remove("hidden");
+  dotsTimer = setInterval(() => {
+    count = (count + 1) % 4;
+    elements.overlayLabel.textContent = label + ".".repeat(count);
+  }, 400);
+}
+
+function hideOverlay() {
+  clearInterval(dotsTimer);
+  dotsTimer = null;
+  elements.overlay.classList.add("hidden");
 }
 
 async function loadVaults(forceRefresh) {
@@ -190,7 +218,7 @@ async function saveCapture() {
   }
 
   elements.saveButton.disabled = true;
-  elements.saveButton.textContent = "saving...";
+  showOverlay("// saving_to_vault");
 
   try {
     const response = await sendRuntimeMessage({
@@ -198,6 +226,11 @@ async function saveCapture() {
       payload: {
         vaultId,
         item: currentCapture.item,
+        captureContext: {
+          sourceTabId: currentCapture.sourceTabId,
+          sourceTabUrl: currentCapture.sourceTabUrl,
+          sourcePageUrl: currentCapture.sourcePageUrl,
+        },
       },
     });
 
@@ -210,14 +243,15 @@ async function saveCapture() {
     } else if (pdfStorage?.attempted) {
       bannerText += ` • ${driveFailureNote(pdfStorage.message)}`;
     }
-    showBanner(bannerText, "success");
-    if (response.openUrl) {
-      await browserApi.tabs.create({ url: response.openUrl });
-    }
+    // Pass openUrl so the banner renders a clickable "open ↗" link.
+    // We deliberately do NOT auto-open a new tab here — doing so steals focus
+    // from the popup window and causes the browser to close it before the user
+    // can read the success state.
+    showBanner(bannerText, "success", response.openUrl);
   } catch (error) {
     showBanner(error.message, "error");
   } finally {
-    elements.saveButton.textContent = "save_to_refhub";
+    hideOverlay();
     syncSaveButton();
   }
 }
@@ -235,9 +269,19 @@ function syncSaveButton() {
   elements.saveButton.disabled = !canSave;
 }
 
-function showBanner(message, variant) {
-  elements.banner.textContent = message;
+function showBanner(message, variant, linkUrl = "") {
   elements.banner.className = `banner ${variant}`;
+  if (linkUrl) {
+    elements.banner.textContent = message + " • ";
+    const a = document.createElement("a");
+    a.href = linkUrl;
+    a.textContent = "open_↗";
+    a.target = "_blank";
+    a.rel = "noreferrer";
+    elements.banner.appendChild(a);
+  } else {
+    elements.banner.textContent = message;
+  }
 }
 
 function renderQuickStatus(config) {

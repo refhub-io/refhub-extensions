@@ -8,6 +8,10 @@
   </head>
   <body class="popup-shell">
     <main class="panel panel-popup">
+      <div id="loading-overlay" class="overlay hidden" role="status" aria-live="polite">
+        <div class="overlay-spinner" aria-hidden="true"></div>
+        <p id="overlay-label" class="overlay-label">// processing</p>
+      </div>
       <header class="panel-header">
         <div class="brand-block">
           <img src="icons/refhub-32.png" width="32" height="32" alt="RefHub icon" class="brand-icon" />

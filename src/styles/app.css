@@ -27,9 +27,17 @@
   min-width: 0; /* prevent flex/grid children from overflowing their container */
 }
 
+/* Popup-only: cap document dimensions so Chrome doesn't expand the popup
+   window when inner content overflows. Uses :has() so options.html is unaffected. */
+html:has(body.popup-shell) {
+  width: 360px;
+  max-width: 360px;
+  height: 560px;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
-  overflow: hidden;
   color: var(--text);
   background:
     radial-gradient(circle at top left, rgba(168, 85, 247, 0.22), transparent 38%),
@@ -41,15 +49,53 @@ body {
 
 .popup-shell {
   width: 360px;
+  max-width: 360px;
   height: 560px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
+/* Options page: full browser tab, two-column layout */
 .options-shell {
   min-height: 100vh;
-  padding: 32px 16px;
+}
+
+.options-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 32px;
+}
+
+.options-header {
+  margin-bottom: 28px;
+}
+
+.options-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 20px;
+  align-items: start;
+}
+
+/* Remove default top-margin from cards inside grid columns — gap handles spacing */
+.options-col > .card {
+  margin-top: 0;
+}
+
+.options-col > .card + .card,
+.options-col > .banner {
+  margin-top: 16px;
+}
+
+@media (max-width: 860px) {
+  .options-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .options-content {
+    padding: 24px 20px;
+  }
 }
 
 .panel {
@@ -57,6 +103,7 @@ body {
 }
 
 .panel-popup {
+  position: relative; /* overlay anchor */
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -73,11 +120,6 @@ body {
 
 .panel-footer {
   flex-shrink: 0;
-}
-
-.panel-wide {
-  max-width: 780px;
-  margin: 0 auto;
 }
 
 /* ── header ─────────────────────────────────────────────────────────────── */
@@ -168,6 +210,11 @@ body {
   color: var(--error-text);
 }
 
+.banner.warning {
+  background: rgba(234, 179, 8, 0.12);
+  color: #fde68a;
+}
+
 /* ── section headings ───────────────────────────────────────────────────── */
 
 .section-heading,
@@ -191,6 +238,43 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ── loading overlay ────────────────────────────────────────────────────── */
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(9, 9, 15, 0.78);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.overlay-spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(168, 85, 247, 0.22);
+  border-top-color: var(--accent);
+  animation: spin 0.75s linear infinite;
+}
+
+.overlay-label {
+  margin: 0;
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
 }
 
 /* ── capture preview ────────────────────────────────────────────────────── */
@@ -434,6 +518,56 @@ button:disabled {
   margin-top: 12px;
 }
 
+/* ── password field wrapper (api key) ───────────────────────────────────── */
+
+.password-field-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.password-field-wrapper input {
+  flex: 1;
+  min-width: 0;
+  /* letter-spacing makes dots/circles more readable in password mode */
+  letter-spacing: 0.12em;
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-size: 13px;
+}
+
+.password-field-wrapper input[type="text"] {
+  letter-spacing: normal;
+}
+
+.toggle-password {
+  flex-shrink: 0;
+  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-size: 11px;
+}
+
+/* ── locked URL tile indicator ──────────────────────────────────────────── */
+
+.info-tile.is-locked {
+  border-color: rgba(168, 85, 247, 0.28);
+}
+
+.info-tile.is-locked .tile-label {
+  color: var(--accent);
+}
+
+/* ── save button confirmation state ─────────────────────────────────────── */
+
+@keyframes save-flash {
+  0%   { opacity: 1; }
+  15%  { opacity: 0.85; }
+  100% { opacity: 1; }
+}
+
+.primary-button.saved {
+  background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+  animation: save-flash 300ms ease;
+}
+
 .simple-list {
   margin: 10px 0 0;
   padding-left: 18px;
@@ -449,6 +583,15 @@ button:disabled {
 
 a {
   color: #d9c2ff;
+}
+
+/* links inside success/error banners inherit the banner text color */
+.banner.success a {
+  color: var(--success-text);
+}
+
+.banner.error a {
+  color: var(--error-text);
 }
 
 input:focus,
