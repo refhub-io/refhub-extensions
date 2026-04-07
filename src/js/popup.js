@@ -61,6 +61,8 @@ bootstrap().catch((error) => {
 });
 
 async function bootstrap() {
+  elements.saveButton.textContent = "connecting_...";
+
   const state = await sendRuntimeMessage({ type: "refhub:get-popup-state" });
   currentConfig = state.config;
 
@@ -68,6 +70,7 @@ async function bootstrap() {
     elements.setupCard.classList.remove("hidden");
     renderSetupState(state.config);
     showBanner("finish setup before saving capture.", "error");
+    syncSaveButton();
     return;
   }
 
@@ -230,6 +233,7 @@ async function saveCapture() {
           sourceTabId: currentCapture.sourceTabId,
           sourceTabUrl: currentCapture.sourceTabUrl,
           sourcePageUrl: currentCapture.sourcePageUrl,
+          pageType: currentCapture.pageType,
         },
       },
     });
@@ -266,6 +270,7 @@ function driveFailureNote(message) {
 
 function syncSaveButton() {
   const canSave = Boolean(currentCapture?.saveable && writableVaults.length && elements.vaultSelect.value);
+  elements.saveButton.textContent = "save_to_refhub";
   elements.saveButton.disabled = !canSave;
 }
 

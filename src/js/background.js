@@ -360,7 +360,8 @@ async function saveItem(payload) {
   let pdfStorage = null;
 
   const savedItemId = response.data?.[0]?.id;
-  if (item.pdf_url && driveStatus.linked && savedItemId) {
+  const isPdfPage = ["pdf-direct", "pdf-wrapper"].includes(captureContext?.pageType);
+  if (item.pdf_url && driveStatus.linked && savedItemId && isPdfPage) {
     pdfStorage = await fetchAndUploadPdf(config, vaultId, savedItemId, resolvePdfDownloadUrl(item.pdf_url), captureContext);
   }
 
@@ -376,47 +377,17 @@ async function saveItem(payload) {
   };
 }
 
+// PDF upload: always delegate to the backend by source URL rather than
+// streaming bytes through the extension.  Sending raw PDF bytes would hit
+// serverless request-body limits (256 KB on Netlify) for virtually every
+// academic PDF — papers are typically 1–10 MB, books far larger.
+// The backend receives the URL + forwarded browser cookies and fetches the
+// file server-side, which works for public and most institutional PDFs.
 async function fetchAndUploadPdf(config, vaultId, vaultPublicationId, pdfUrl, captureContext) {
-  try {
-    const pdfData = await fetchPdfBytes(pdfUrl, captureContext);
-    return uploadPdfBytes(config, vaultId, vaultPublicationId, pdfData, pdfUrl);
-  } catch (error) {
-    return uploadPdfBySourceUrl(config, vaultId, vaultPublicationId, pdfUrl, captureContext, error.message);
-  }
+  return uploadPdfBySourceUrl(config, vaultId, vaultPublicationId, pdfUrl, captureContext);
 }
 
-async function uploadPdfBytes(config, vaultId, vaultPublicationId, pdfData, originalPdfUrl) {
-  const uploadResponse = await fetch(
-    `${config.apiBaseUrl}/api/v1/vaults/${encodeURIComponent(vaultId)}/items/${encodeURIComponent(vaultPublicationId)}/pdf`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        "Content-Type": "application/pdf",
-      },
-      body: pdfData.bytes,
-    },
-  );
-
-  const data = await uploadResponse.json().catch(() => ({}));
-  if (!uploadResponse.ok) {
-    return {
-      attempted: true,
-      stored: false,
-      message: data?.error?.message || `Drive upload failed (${uploadResponse.status}).`,
-    };
-  }
-
-  return {
-    attempted: true,
-    stored: true,
-    source_url: pdfData.finalUrl || originalPdfUrl,
-    fetch_strategy: pdfData.strategy,
-    ...data.data,
-  };
-}
-
-async function uploadPdfBySourceUrl(config, vaultId, vaultPublicationId, pdfUrl, captureContext, fetchFailureMessage) {
+async function uploadPdfBySourceUrl(config, vaultId, vaultPublicationId, pdfUrl, captureContext) {
   const cookieHeader = await buildCookieHeader(pdfUrl);
   const referer = captureContext?.sourcePageUrl || captureContext?.sourceTabUrl || "";
   const uploadResponse = await fetch(
@@ -437,11 +408,16 @@ async function uploadPdfBySourceUrl(config, vaultId, vaultPublicationId, pdfUrl,
 
   const data = await uploadResponse.json().catch(() => ({}));
   if (!uploadResponse.ok) {
-    const backendMessage = data?.error?.message || `Drive upload failed (${uploadResponse.status}).`;
+    // 404 route_not_found means this backend doesn't have PDF storage yet.
+    // Treat it as "feature not available" rather than an error so the popup
+    // doesn't show a confusing failure message.
+    if (uploadResponse.status === 404 || data?.error?.code === "route_not_found") {
+      return null;
+    }
     return {
       attempted: true,
       stored: false,
-      message: fetchFailureMessage ? `${fetchFailureMessage} ${backendMessage}` : backendMessage,
+      message: data?.error?.message || `Drive upload failed (${uploadResponse.status}).`,
     };
   }
 
@@ -450,112 +426,8 @@ async function uploadPdfBySourceUrl(config, vaultId, vaultPublicationId, pdfUrl,
     stored: true,
     source_url: pdfUrl,
     fetch_strategy: "backend-source-url",
-    browser_fetch_failed: Boolean(fetchFailureMessage),
     ...data.data,
   };
-}
-
-async function fetchPdfBytes(pdfUrl, captureContext) {
-  const pageResult = await tryPageContextPdfFetch(pdfUrl, captureContext);
-  if (pageResult?.ok) {
-    return pageResult;
-  }
-
-  try {
-    return await fetchPdfFromExtension(pdfUrl);
-  } catch (error) {
-    const reasons = [pageResult?.message, error.message].filter(Boolean);
-    throw new Error(reasons[0] === reasons[1] ? reasons[0] : reasons.join(" "));
-  }
-}
-
-async function tryPageContextPdfFetch(pdfUrl, captureContext) {
-  const tabId = captureContext?.sourceTabId;
-  const sourcePageUrl = captureContext?.sourcePageUrl || captureContext?.sourceTabUrl || "";
-  if (!tabId || !isSameOrigin(sourcePageUrl, pdfUrl)) {
-    return null;
-  }
-
-  try {
-    const [{ result }] = await browserApi.scripting.executeScript({
-      target: { tabId },
-      args: [pdfUrl],
-      world: "MAIN",
-      func: fetchPdfFromPageContext,
-    });
-
-    if (!result?.ok) {
-      return { ok: false, message: result?.message || "Page-context PDF fetch failed." };
-    }
-
-    return {
-      ok: true,
-      bytes: result.bytes,
-      finalUrl: result.finalUrl || pdfUrl,
-      strategy: "page-context",
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      message: `Page-context PDF fetch failed. ${error.message}`,
-    };
-  }
-}
-
-async function fetchPdfFromExtension(pdfUrl) {
-  const pdfResponse = await fetch(pdfUrl, {
-    method: "GET",
-    credentials: "include",
-    redirect: "follow",
-  });
-
-  if (!pdfResponse.ok) {
-    throw new Error(`Background PDF fetch failed (${pdfResponse.status}).`);
-  }
-
-  const contentType = pdfResponse.headers.get("content-type") || "";
-  const finalUrl = pdfResponse.url || pdfUrl;
-  if (!looksLikePdf(contentType, finalUrl)) {
-    throw new Error("Background PDF fetch did not return a PDF.");
-  }
-
-  return {
-    ok: true,
-    bytes: await pdfResponse.arrayBuffer(),
-    finalUrl,
-    strategy: "background-fetch",
-  };
-}
-
-async function fetchPdfFromPageContext(targetUrl) {
-  const looksLikePdf = (contentType, url) =>
-    /application\/pdf/i.test(contentType || "") || /\.pdf(\?[^#]*)?(#.*)?$/i.test(url || "");
-
-  try {
-    const response = await fetch(targetUrl, {
-      method: "GET",
-      credentials: "include",
-      redirect: "follow",
-    });
-
-    if (!response.ok) {
-      return { ok: false, message: `Page-context PDF fetch failed (${response.status}).` };
-    }
-
-    const contentType = response.headers.get("content-type") || "";
-    const finalUrl = response.url || targetUrl;
-    if (!looksLikePdf(contentType, finalUrl)) {
-      return { ok: false, message: "Page-context fetch did not return a PDF." };
-    }
-
-    return {
-      ok: true,
-      bytes: await response.arrayBuffer(),
-      finalUrl,
-    };
-  } catch (error) {
-    return { ok: false, message: `Page-context PDF fetch failed. ${error.message}` };
-  }
 }
 
 async function getGoogleDriveStatus(forceRefresh) {
@@ -931,19 +803,6 @@ async function buildCookieHeader(url) {
     return "";
   }
 }
-
-function isSameOrigin(left, right) {
-  try {
-    return new URL(left).origin === new URL(right).origin;
-  } catch {
-    return false;
-  }
-}
-
-function looksLikePdf(contentType, url) {
-  return /application\/pdf/i.test(contentType || "") || /\.pdf(\?[^#]*)?(#.*)?$/i.test(url || "");
-}
-
 
 function extractMetadataFromHtml(html, baseUrl) {
   const metaEntries = [...html.matchAll(/<meta\s+[^>]*(?:name|property)=["']([^"']+)["'][^>]*content=["']([^"']*)["'][^>]*>/gi)];
