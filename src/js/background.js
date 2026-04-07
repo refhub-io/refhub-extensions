@@ -146,8 +146,21 @@ function normalizePdfTabCapture(tab) {
 }
 
 async function enrichPdfTabCapture(config, capture) {
-  const pdfMetadata = await fetchPdfMetadata(config, capture.item?.pdf_url, capture.sourcePageUrl);
-  return mergeCaptureWithPdfMetadata(capture, pdfMetadata);
+  const pdfUrl = capture.item?.pdf_url || "";
+  const landingUrl = resolveLandingUrl(pdfUrl);
+
+  // For publishers like arXiv (/abs/{id}) and HAL (/hal-{id}) the landing page
+  // has rich citation_* meta tags.  Fetch it to get proper title, authors, DOI
+  // instead of relying solely on PDF text extraction.
+  let nextCapture = capture;
+  if (landingUrl && landingUrl !== pdfUrl) {
+    nextCapture = { ...nextCapture, sourcePageUrl: landingUrl };
+    const pageMetadata = await fetchPageMetadataFromUrl(landingUrl).catch(() => null);
+    nextCapture = mergeCaptureWithPageMetadata(nextCapture, pageMetadata, landingUrl);
+  }
+
+  const pdfMetadata = await fetchPdfMetadata(config, pdfUrl, nextCapture.sourcePageUrl || pdfUrl);
+  return mergeCaptureWithPdfMetadata(nextCapture, pdfMetadata);
 }
 
 async function enrichPdfWrapperCapture(config, capture, wrapperUrl) {
@@ -250,15 +263,19 @@ async function fetchPageMetadataFromUrl(url) {
   }
 }
 
+function isSessionBoundPdfUrl(url) {
+  return /[?&]hmac=/i.test(url) || /[?&]X-Amz-Signature=/i.test(url);
+}
+
 async function fetchPdfMetadata(config, pdfUrl, referer = "") {
   if (!pdfUrl) {
     return null;
   }
 
-  // URLs with hmac tokens are session+IP-bound (ACM pdfdirect, Wiley pdfdirect)
-  // and cannot be fetched server-side — the backend would get 403.  Skip the
-  // round-trip; metadata comes from page context extraction instead.
-  if (/[?&]hmac=/i.test(pdfUrl)) {
+  // Session-bound URLs cannot be fetched server-side — skip the round-trip.
+  // hmac= : ACM pdfdirect, Wiley pdfdirect (session+IP-bound)
+  // X-Amz-Signature= : AWS presigned S3 URLs (e.g. ScienceDirect assets, short TTL)
+  if (isSessionBoundPdfUrl(pdfUrl)) {
     return null;
   }
 
@@ -361,8 +378,9 @@ async function saveItem(payload) {
 
   const savedItemId = response.data?.[0]?.id;
   const isPdfPage = ["pdf-direct", "pdf-wrapper"].includes(captureContext?.pageType);
+  const pdfDownloadUrl = resolvePdfDownloadUrl(item.pdf_url);
   if (item.pdf_url && driveStatus.linked && savedItemId && isPdfPage) {
-    pdfStorage = await fetchAndUploadPdf(config, vaultId, savedItemId, resolvePdfDownloadUrl(item.pdf_url), captureContext);
+    pdfStorage = await fetchAndUploadPdf(config, vaultId, savedItemId, pdfDownloadUrl, captureContext);
   }
 
   const responseWithPdf = {
@@ -377,14 +395,81 @@ async function saveItem(payload) {
   };
 }
 
-// PDF upload: always delegate to the backend by source URL rather than
-// streaming bytes through the extension.  Sending raw PDF bytes would hit
-// serverless request-body limits (256 KB on Netlify) for virtually every
-// academic PDF — papers are typically 1–10 MB, books far larger.
-// The backend receives the URL + forwarded browser cookies and fetches the
-// file server-side, which works for public and most institutional PDFs.
+// PDF upload: backend source-URL approach for public/institutional PDFs;
+// browser-fetch + direct Drive upload for session-bound CDN URLs (e.g.
+// ScienceDirect S3 presigned URLs protected by Cloudflare IP checks).
 async function fetchAndUploadPdf(config, vaultId, vaultPublicationId, pdfUrl, captureContext) {
+  if (isSessionBoundPdfUrl(pdfUrl)) {
+    return uploadPdfViaBrowserFetch(config, vaultId, vaultPublicationId, pdfUrl);
+  }
   return uploadPdfBySourceUrl(config, vaultId, vaultPublicationId, pdfUrl, captureContext);
+}
+
+// For Cloudflare-protected / presigned URLs the backend can't fetch from a
+// different IP.  Instead: browser fetches the bytes (right IP + cf_clearance),
+// backend creates a Drive resumable upload session, browser PUTs directly to
+// Google Drive, then notifies backend to record the upload.
+async function uploadPdfViaBrowserFetch(config, vaultId, vaultPublicationId, pdfUrl) {
+  // 1. Fetch the PDF bytes in the browser (user's IP + cookies).
+  let pdfResponse;
+  try {
+    pdfResponse = await fetch(pdfUrl, {
+      credentials: "include",
+      redirect: "follow",
+      headers: { accept: "application/pdf,application/octet-stream,*/*;q=0.8" },
+    });
+  } catch (e) {
+    return { attempted: true, stored: false, message: `Browser fetch error: ${e.message}` };
+  }
+  if (!pdfResponse.ok) {
+    return { attempted: true, stored: false, message: `Browser fetch failed (${pdfResponse.status}).` };
+  }
+  const pdfBytes = await pdfResponse.arrayBuffer();
+
+  // 2. Ask the backend to create a Drive resumable upload session.
+  const base = `${config.apiBaseUrl}/api/v1/vaults/${encodeURIComponent(vaultId)}/items/${encodeURIComponent(vaultPublicationId)}/pdf`;
+  const sessionResp = await fetch(`${base}/session`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${config.apiKey}` },
+  });
+  if (!sessionResp.ok) {
+    const sessionErr = await sessionResp.json().catch(() => ({}));
+    return { attempted: true, stored: false, message: sessionErr?.error?.message || "Drive session creation failed." };
+  }
+  const { data: session } = await sessionResp.json();
+
+  // 3. PUT bytes directly to Google Drive (no Netlify in the path → no size limit).
+  const driveResp = await fetch(session.upload_url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Length": String(pdfBytes.byteLength),
+    },
+    body: pdfBytes,
+  });
+  if (!driveResp.ok) {
+    return { attempted: true, stored: false, message: `Drive upload failed (${driveResp.status}).` };
+  }
+  const driveFile = await driveResp.json().catch(() => ({}));
+
+  // 4. Notify backend to record the upload in the database.
+  await fetch(`${base}/complete`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      file_id: driveFile.id,
+      web_view_link: driveFile.webViewLink || driveFile.webContentLink || null,
+      source_url: pdfUrl,
+    }),
+  }).catch(() => { /* record failure is non-fatal */ });
+
+  return {
+    attempted: true,
+    stored: true,
+    source_url: pdfUrl,
+    fetch_strategy: "browser-direct",
+    pdfUrl: driveFile.webViewLink || driveFile.webContentLink || null,
+  };
 }
 
 async function uploadPdfBySourceUrl(config, vaultId, vaultPublicationId, pdfUrl, captureContext) {
