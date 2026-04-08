@@ -7,8 +7,8 @@
     <link rel="stylesheet" href="styles/app.css" />
   </head>
   <body class="options-shell">
-    <main class="panel panel-wide">
-      <header class="panel-header">
+    <div class="options-content">
+      <header class="panel-header options-header">
         <div class="brand-block">
           <img src="icons/refhub-32.png" width="32" height="32" alt="refhub icon" class="brand-icon" />
           <div>
@@ -19,95 +19,108 @@
         </div>
       </header>
 
-      <section class="card">
-        <div class="section-heading">
-          <h2>// connection</h2>
-          <span id="build-mode-pill" class="pill">required</span>
+      <div class="options-grid">
+
+        <!-- ── left column: connection form ─────────────────────────────── -->
+        <div class="options-col">
+          <section class="card">
+            <div class="section-heading">
+              <h2>// connection</h2>
+              <span id="build-mode-pill" class="pill">required</span>
+            </div>
+            <p class="supporting-text">
+              this extension uses a refhub API key for vault listing and item creation. create the key in
+              <a id="api-key-path-link" href="https://refhub.io/profile-edit" target="_blank" rel="noreferrer"><code>/profile-edit</code></a>
+              under <code>api_keys</code>.
+            </p>
+            <div class="info-grid">
+              <article class="info-tile">
+                <span class="tile-label">required_scopes</span>
+                <span class="tile-value">vaults:read • vaults:write</span>
+              </article>
+              <article class="info-tile">
+                <span class="tile-label">optional_scope</span>
+                <span class="tile-value">vault restriction only if you want least-privilege keys</span>
+              </article>
+            </div>
+            <div class="info-grid">
+              <article id="api-url-tile" class="info-tile">
+                <span id="api-url-tile-label" class="tile-label">refhub_api_base_url</span>
+                <span id="effective-api-base-url" class="tile-value">-</span>
+              </article>
+              <article id="app-url-tile" class="info-tile">
+                <span id="app-url-tile-label" class="tile-label">refhub_app_url</span>
+                <span id="effective-app-base-url" class="tile-value">-</span>
+              </article>
+            </div>
+            <form id="settings-form" class="form-grid">
+              <p id="build-mode-copy" class="microcopy">
+                release builds keep refhub endpoints fixed. local or self-hosted targets are available through a dev override build.
+              </p>
+              <div id="advanced-endpoints" class="hidden">
+                <label class="field">
+                  <span>refhub_api_base_url</span>
+                  <input id="api-base-url" name="apiBaseUrl" type="url" placeholder="https://refhub-api.netlify.app" required />
+                  <small class="field-help">backend root only. do not include <code>/api/v1</code>.</small>
+                </label>
+                <label class="field">
+                  <span>refhub_app_url</span>
+                  <input id="app-base-url" name="appBaseUrl" type="url" placeholder="https://refhub.io" />
+                  <small class="field-help">used for open-in-app links after save.</small>
+                </label>
+              </div>
+              <label class="field">
+                <span>api_key</span>
+                <div class="password-field-wrapper">
+                  <input id="api-key" name="apiKey" type="password" placeholder="Paste refhub API key" autocomplete="off" required />
+                  <button id="toggle-api-key" class="ghost-button compact toggle-password" type="button" aria-label="Toggle API key visibility">show</button>
+                </div>
+                <small class="field-help">the key can be restricted to selected vaults. the extension only shows writable vaults.</small>
+              </label>
+              <div class="inline-actions">
+                <button id="save-button" class="primary-button" type="submit">save_settings</button>
+                <button id="clear-settings" class="ghost-button" type="button">clear</button>
+              </div>
+            </form>
+          </section>
+
+          <section id="settings-status" class="banner hidden" aria-live="polite"></section>
         </div>
-        <p class="supporting-text">
-          this extension uses a refhub API key for vault listing and item creation. create the key in
-          <a id="api-key-path-link" href="https://refhub.io/profile-edit" target="_blank" rel="noreferrer"><code>/profile-edit</code></a>
-          under <code>api_keys</code>.
-        </p>
-        <div class="info-grid">
-          <article class="info-tile">
-            <span class="tile-label">required_scopes</span>
-            <span class="tile-value">vaults:read • vaults:write</span>
-          </article>
-          <article class="info-tile">
-            <span class="tile-label">optional_scope</span>
-            <span class="tile-value">vault restriction only if you want least-privilege keys</span>
-          </article>
+
+        <!-- ── right column: help & info ────────────────────────────────── -->
+        <div class="options-col">
+          <section class="card">
+            <h2>// setup_flow</h2>
+            <ol class="simple-list">
+              <li>sign in to refhub web app.</li>
+              <li>open <code>/profile-edit</code> and switch to <code>api_keys</code>.</li>
+              <li>create a key with <code>vaults:read</code> and <code>vaults:write</code>.</li>
+              <li>paste the key here. release builds already point at production refhub.</li>
+            </ol>
+          </section>
+
+          <section class="card">
+            <h2>// what_is_sent_on_save</h2>
+            <ul class="simple-list">
+              <li>normalized page metadata such as title, authors, DOI, year, journal, abstract, and URL</li>
+              <li>the selected refhub vault ID</li>
+              <li>no full page HTML is sent by this prototype</li>
+            </ul>
+          </section>
+
+          <section class="card">
+            <h2>// extension_permissions</h2>
+            <ul class="simple-list">
+              <li><code>activeTab</code> so capture only runs on the page you explicitly opened from.</li>
+              <li><code>scripting</code> so the extension can read metadata from that active tab.</li>
+              <li><code>storage</code> so API key and last vault selection persist locally, with URL overrides only in dev builds.</li>
+              <li>host access is limited to the bundled refhub API origin in release builds.</li>
+            </ul>
+          </section>
         </div>
-        <div class="info-grid">
-          <article class="info-tile">
-            <span class="tile-label">refhub_api_base_url</span>
-            <span id="effective-api-base-url" class="tile-value">-</span>
-          </article>
-          <article class="info-tile">
-            <span class="tile-label">refhub_app_url</span>
-            <span id="effective-app-base-url" class="tile-value">-</span>
-          </article>
-        </div>
-        <form id="settings-form" class="form-grid">
-          <p id="build-mode-copy" class="microcopy">
-            release builds keep refhub endpoints fixed. local or self-hosted targets are available through a dev override build.
-          </p>
-          <div id="advanced-endpoints" class="hidden">
-            <label class="field">
-              <span>refhub_api_base_url</span>
-              <input id="api-base-url" name="apiBaseUrl" type="url" placeholder="https://refhub-api.netlify.app" required />
-              <small class="field-help">backend root only. do not include <code>/api/v1</code>.</small>
-            </label>
-            <label class="field">
-              <span>refhub_app_url</span>
-              <input id="app-base-url" name="appBaseUrl" type="url" placeholder="https://refhub.io" />
-              <small class="field-help">used for open-in-app links after save.</small>
-            </label>
-          </div>
-          <label class="field">
-            <span>api_key</span>
-            <textarea id="api-key" name="apiKey" rows="4" placeholder="Paste refhub API key" required></textarea>
-            <small class="field-help">the key can be restricted to selected vaults. the extension only shows writable vaults.</small>
-          </label>
-          <div class="inline-actions">
-            <button class="primary-button" type="submit">save_settings</button>
-            <button id="clear-settings" class="ghost-button" type="button">clear</button>
-          </div>
-        </form>
-      </section>
 
-      <section class="card">
-        <h2>// setup_flow</h2>
-        <ol class="simple-list">
-          <li>sign in to refhub web app.</li>
-          <li>open <code>/profile-edit</code> and switch to <code>api_keys</code>.</li>
-          <li>create a key with <code>vaults:read</code> and <code>vaults:write</code>.</li>
-          <li>paste the key here. release builds already point at production refhub.</li>
-        </ol>
-      </section>
-
-      <section class="card">
-        <h2>// what_is_sent_on_save</h2>
-        <ul class="simple-list">
-          <li>normalized page metadata such as title, authors, DOI, year, journal, abstract, and URL</li>
-          <li>the selected refhub vault ID</li>
-          <li>no full page HTML is sent by this prototype</li>
-        </ul>
-      </section>
-
-      <section class="card">
-        <h2>// extension_permissions</h2>
-        <ul class="simple-list">
-          <li><code>activeTab</code> so capture only runs on the page you explicitly opened from.</li>
-          <li><code>scripting</code> so the extension can read metadata from that active tab.</li>
-          <li><code>storage</code> so API key and last vault selection persist locally, with URL overrides only in dev builds.</li>
-          <li>host access is limited to the bundled refhub API origin in release builds.</li>
-        </ul>
-      </section>
-
-      <section id="settings-status" class="banner hidden" aria-live="polite"></section>
-    </main>
+      </div>
+    </div>
 
     <script type="module" src="js/options.js"></script>
   </body>

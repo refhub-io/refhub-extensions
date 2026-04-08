@@ -3,6 +3,8 @@ import { saveConfig } from "./storage.js";
 
 const elements = {
   banner: document.querySelector("#message-banner"),
+  overlay: document.querySelector("#loading-overlay"),
+  overlayLabel: document.querySelector("#overlay-label"),
   setupCard: document.querySelector("#setup-card"),
   setupButton: document.querySelector("#setup-button"),
   setupAppLink: document.querySelector("#setup-app-link"),
@@ -14,14 +16,17 @@ const elements = {
   confidenceBadge: document.querySelector("#confidence-badge"),
   captureTitle: document.querySelector("#capture-title"),
   captureSubtitle: document.querySelector("#capture-subtitle"),
-  rawPreview: document.querySelector("#raw-preview"),
   pageType: document.querySelector("#field-page-type"),
   doi: document.querySelector("#field-doi"),
   source: document.querySelector("#field-source"),
   url: document.querySelector("#field-url"),
+  pdfUrl: document.querySelector("#field-pdf-url"),
   vaultCard: document.querySelector("#vault-card"),
   vaultSelect: document.querySelector("#vault-select"),
   refreshVaults: document.querySelector("#refresh-vaults"),
+  driveCard: document.querySelector("#drive-card"),
+  drivePill: document.querySelector("#drive-pill"),
+  driveCopy: document.querySelector("#drive-copy"),
   saveButton: document.querySelector("#save-button"),
   openOptions: document.querySelector("#open-options"),
   quickStatus: document.querySelector("#quick-status"),
@@ -31,6 +36,8 @@ const elements = {
 let currentCapture = null;
 let writableVaults = [];
 let currentConfig = null;
+let currentDriveStatus = null;
+let dotsTimer = null;
 
 document.querySelector("#setup-button").addEventListener("click", openOptions);
 elements.openOptions.addEventListener("click", openOptions);
@@ -54,6 +61,8 @@ bootstrap().catch((error) => {
 });
 
 async function bootstrap() {
+  elements.saveButton.textContent = "connecting_...";
+
   const state = await sendRuntimeMessage({ type: "refhub:get-popup-state" });
   currentConfig = state.config;
 
@@ -61,18 +70,21 @@ async function bootstrap() {
     elements.setupCard.classList.remove("hidden");
     renderSetupState(state.config);
     showBanner("finish setup before saving capture.", "error");
+    syncSaveButton();
     return;
   }
 
   elements.captureCard.classList.remove("hidden");
   elements.vaultCard.classList.remove("hidden");
+  elements.driveCard.classList.remove("hidden");
   renderSetupState(state.config);
   renderQuickStatus(state.config);
 
-  await Promise.all([extractCurrentTab(), loadVaults(false)]);
+  await Promise.all([extractCurrentTab(), loadVaults(false), loadGoogleDriveStatus(false)]);
 }
 
 async function extractCurrentTab() {
+  showOverlay("// extracting_metadata");
   elements.captureLoading.classList.remove("hidden");
   elements.captureContent.classList.add("hidden");
   elements.saveButton.disabled = true;
@@ -80,12 +92,36 @@ async function extractCurrentTab() {
   try {
     currentCapture = await sendRuntimeMessage({ type: "refhub:extract-current-tab" });
     renderCapture(currentCapture);
-    showBanner(currentCapture.saveable ? "metadata extracted • ready_to_save" : currentCapture.blockReason, currentCapture.saveable ? "success" : "error");
+    if (!currentCapture.saveable) {
+      showBanner(currentCapture.blockReason, "error");
+    } else if (currentCapture.warnings?.length) {
+      showBanner(`metadata extracted • ${currentCapture.warnings[0]}`, "warning");
+    } else {
+      showBanner("metadata extracted • ready_to_save", "success");
+    }
   } catch (error) {
     currentCapture = null;
     showBanner(error.message, "error");
     elements.captureLoading.textContent = "// could_not_extract_tab_metadata";
+  } finally {
+    hideOverlay();
   }
+}
+
+function showOverlay(label) {
+  let count = 0;
+  elements.overlayLabel.textContent = label;
+  elements.overlay.classList.remove("hidden");
+  dotsTimer = setInterval(() => {
+    count = (count + 1) % 4;
+    elements.overlayLabel.textContent = label + ".".repeat(count);
+  }, 400);
+}
+
+function hideOverlay() {
+  clearInterval(dotsTimer);
+  dotsTimer = null;
+  elements.overlay.classList.add("hidden");
 }
 
 async function loadVaults(forceRefresh) {
@@ -105,6 +141,21 @@ async function loadVaults(forceRefresh) {
   }
 }
 
+async function loadGoogleDriveStatus(forceRefresh) {
+  try {
+    currentDriveStatus = await sendRuntimeMessage({ type: "refhub:get-google-drive-status", forceRefresh });
+    renderGoogleDriveStatus(currentDriveStatus);
+  } catch (error) {
+    currentDriveStatus = {
+      linked: false,
+      folder_status: "unlinked",
+      folder_name: null,
+      folder_id: null,
+    };
+    renderGoogleDriveStatus(currentDriveStatus, error.message);
+  }
+}
+
 function renderCapture(capture) {
   elements.captureLoading.classList.add("hidden");
   elements.captureContent.classList.remove("hidden");
@@ -115,19 +166,7 @@ function renderCapture(capture) {
   elements.doi.textContent = capture.item.doi || "not_found";
   elements.source.textContent = capture.item.journal || capture.hostname || "unknown_source";
   elements.url.textContent = capture.item.url || "-";
-  elements.rawPreview.textContent = JSON.stringify(
-    {
-      title: capture.item.title,
-      authors: capture.item.authors,
-      year: capture.item.year,
-      journal: capture.item.journal,
-      abstract: capture.item.abstract,
-      publication_type: capture.item.publication_type,
-      metadata_sources: capture.metadataSources,
-    },
-    null,
-    2,
-  );
+  elements.pdfUrl.textContent = capture.item.pdf_url || "not_detected";
   syncSaveButton();
 }
 
@@ -166,7 +205,7 @@ function renderVaults(vaults, lastVaultId) {
 
   elements.vaultSelect.replaceChildren(fragment);
   elements.vaultSelect.disabled = false;
-  elements.vaultHint.textContent = "// public vaults open at /public/:slug • private/shared vaults open at /vault/:id";
+  elements.vaultHint.textContent = "// vault route: /vault/:id";
   syncSaveButton();
 }
 
@@ -182,7 +221,7 @@ async function saveCapture() {
   }
 
   elements.saveButton.disabled = true;
-  elements.saveButton.textContent = "saving...";
+  showOverlay("// saving_to_vault");
 
   try {
     const response = await sendRuntimeMessage({
@@ -190,36 +229,70 @@ async function saveCapture() {
       payload: {
         vaultId,
         item: currentCapture.item,
+        captureContext: {
+          sourceTabId: currentCapture.sourceTabId,
+          sourceTabUrl: currentCapture.sourceTabUrl,
+          sourcePageUrl: currentCapture.sourcePageUrl,
+          pageType: currentCapture.pageType,
+        },
       },
     });
 
     const vault = writableVaults.find((entry) => entry.id === vaultId);
     const vaultLabel = vault ? `saved_to ${vault.name}` : "saved_to_refhub";
-    showBanner(vaultLabel, "success");
-    if (response.openUrl) {
-      await browserApi.tabs.create({ url: response.openUrl });
+    const pdfStorage = response.response?.data?.[0]?.pdf_storage;
+    let bannerText = vaultLabel;
+    if (pdfStorage?.stored) {
+      bannerText += " • pdf_sent_to_drive";
+    } else if (pdfStorage?.attempted) {
+      bannerText += ` • ${driveFailureNote(pdfStorage.message)}`;
     }
+    // Pass openUrl so the banner renders a clickable "open ↗" link.
+    // We deliberately do NOT auto-open a new tab here — doing so steals focus
+    // from the popup window and causes the browser to close it before the user
+    // can read the success state.
+    showBanner(bannerText, "success", response.openUrl);
   } catch (error) {
     showBanner(error.message, "error");
   } finally {
-    elements.saveButton.textContent = "save_to_refhub";
+    hideOverlay();
     syncSaveButton();
   }
 }
 
+function driveFailureNote(message) {
+  const msg = message || "";
+  if (/\b(401|403)\b/.test(msg)) return "pdf_access_denied";
+  if (/\b404\b/.test(msg)) return "pdf_not_found";
+  if (/confirm.*pdf|not.*pdf/i.test(msg)) return "pdf_unconfirmed";
+  return "pdf_not_saved_to_drive";
+}
+
 function syncSaveButton() {
   const canSave = Boolean(currentCapture?.saveable && writableVaults.length && elements.vaultSelect.value);
+  elements.saveButton.textContent = "save_to_refhub";
   elements.saveButton.disabled = !canSave;
 }
 
-function showBanner(message, variant) {
-  elements.banner.textContent = message;
+function showBanner(message, variant, linkUrl = "") {
   elements.banner.className = `banner ${variant}`;
+  if (linkUrl) {
+    elements.banner.textContent = message + " • ";
+    const a = document.createElement("a");
+    a.href = linkUrl;
+    a.textContent = "open_↗";
+    a.target = "_blank";
+    a.rel = "noreferrer";
+    elements.banner.appendChild(a);
+  } else {
+    elements.banner.textContent = message;
+  }
 }
 
 function renderQuickStatus(config) {
   const target = config.appBaseUrl || "https://refhub.io";
-  elements.quickStatus.textContent = `api_ready • open_target ${target}`;
+  const driveFlag = currentDriveStatus?.linked ? "drive_pdf_storage_on" : "drive_pdf_storage_off";
+  elements.quickStatus.textContent = `api_ready • ${driveFlag} • open_target ${target}`;
 }
 
 function renderSetupState(config) {
@@ -231,4 +304,13 @@ function renderSetupState(config) {
 
 async function openOptions() {
   await browserApi.runtime.openOptionsPage();
+}
+
+function renderGoogleDriveStatus(status, errorMessage = "") {
+  const linked = Boolean(status?.linked);
+  elements.drivePill.textContent = linked ? "linked" : "inactive";
+  elements.driveCopy.textContent = linked
+    ? `pdf saves with a discovered pdf_url will be routed through RefHub into Drive folder ${status.folder_name || "refhub"}.`
+    : errorMessage || "google drive pdf storage is not linked for this RefHub account. saves will keep the source pdf_url only.";
+  renderQuickStatus(currentConfig || { appBaseUrl: "https://refhub.io" });
 }

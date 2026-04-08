@@ -1,11 +1,12 @@
 {
   "name": "refhub-browser-extension-prototype",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "refhub browser extension prototype",
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:dev": "REFHUB_ALLOW_CUSTOM_URLS=1 node scripts/build.mjs",
+    "build:local": "REFHUB_API_BASE_URL=http://localhost:8888 REFHUB_ALLOW_CUSTOM_URLS=1 node scripts/build.mjs",
     "clean": "node scripts/build.mjs --clean"
   }
 }

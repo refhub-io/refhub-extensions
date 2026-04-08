@@ -8,6 +8,10 @@
   </head>
   <body class="popup-shell">
     <main class="panel panel-popup">
+      <div id="loading-overlay" class="overlay hidden" role="status" aria-live="polite">
+        <div class="overlay-spinner" aria-hidden="true"></div>
+        <p id="overlay-label" class="overlay-label">// processing</p>
+      </div>
       <header class="panel-header">
         <div class="brand-block">
           <img src="icons/refhub-32.png" width="32" height="32" alt="RefHub icon" class="brand-icon" />
@@ -17,85 +21,103 @@
             <p id="quick-status" class="microcopy">waiting_for_config</p>
           </div>
         </div>
-        <button id="open-options" class="ghost-button" type="button">settings</button>
+        <button id="open-options" class="icon-button" type="button" aria-label="Settings">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
       </header>
 
-      <section id="message-banner" class="banner hidden" aria-live="polite"></section>
+      <div class="panel-body">
+        <section id="setup-card" class="card hidden">
+          <div class="section-heading">
+            <h2>// setup</h2>
+            <span class="pill">required</span>
+          </div>
+          <p class="supporting-text">
+            create a RefHub API key from <code>/profile-edit</code> → <code>api_keys</code>. enable
+            <code>vaults:read</code> and <code>vaults:write</code>. optional vault restriction is supported.
+          </p>
+          <div class="info-grid">
+            <article class="info-tile">
+              <span class="tile-label">app_url</span>
+              <span id="setup-app-base" class="tile-value">https://refhub.io</span>
+            </article>
+            <article class="info-tile">
+              <span class="tile-label">api_base</span>
+              <span id="setup-api-base" class="tile-value">https://refhub-api.netlify.app</span>
+            </article>
+          </div>
+          <div class="inline-actions">
+            <button id="setup-button" class="primary-button" type="button">open_settings</button>
+            <a id="setup-app-link" class="ghost-button link-button" href="https://refhub.io/profile-edit" target="_blank" rel="noreferrer">open_refhub</a>
+          </div>
+        </section>
 
-      <section id="setup-card" class="card hidden">
-        <div class="section-heading">
-          <h2>// setup</h2>
-          <span class="pill">required</span>
-        </div>
-        <p class="supporting-text">
-          create a RefHub API key from <code>/profile-edit</code> → <code>api_keys</code>. enable
-          <code>vaults:read</code> and <code>vaults:write</code>. optional vault restriction is supported.
-        </p>
-        <div class="info-grid">
-          <article class="info-tile">
-            <span class="tile-label">app_url</span>
-            <span id="setup-app-base" class="tile-value">https://refhub.io</span>
-          </article>
-          <article class="info-tile">
-            <span class="tile-label">api_base</span>
-            <span id="setup-api-base" class="tile-value">https://refhub-api.netlify.app</span>
-          </article>
-        </div>
-        <div class="inline-actions">
-          <button id="setup-button" class="primary-button" type="button">open_settings</button>
-          <a id="setup-app-link" class="ghost-button link-button" href="https://refhub.io/profile-edit" target="_blank" rel="noreferrer">open_refhub</a>
-        </div>
-      </section>
+        <section id="capture-card" class="card hidden">
+          <div class="section-heading">
+            <h2>// preview</h2>
+            <span id="confidence-badge" class="pill">-</span>
+          </div>
+          <div id="capture-loading" class="status-row">// extracting_page_metadata...</div>
+          <div id="capture-content" class="hidden">
+            <p id="capture-title" class="capture-title"></p>
+            <p id="capture-subtitle" class="capture-subtitle"></p>
+            <dl class="meta-list">
+              <div>
+                <dt>page_type</dt>
+                <dd id="field-page-type">-</dd>
+              </div>
+              <div>
+                <dt>doi</dt>
+                <dd id="field-doi">-</dd>
+              </div>
+              <div>
+                <dt>source</dt>
+                <dd id="field-source">-</dd>
+              </div>
+              <div>
+                <dt>url</dt>
+                <dd id="field-url" class="multiline">-</dd>
+              </div>
+              <div>
+                <dt>pdf_url</dt>
+                <dd id="field-pdf-url" class="multiline">-</dd>
+              </div>
+            </dl>
+          </div>
+        </section>
 
-      <section id="capture-card" class="card hidden">
-        <div class="section-heading">
-          <h2>// preview</h2>
-          <span id="confidence-badge" class="pill">-</span>
-        </div>
-        <div id="capture-loading" class="status-row">// extracting_page_metadata...</div>
-        <div id="capture-content" class="hidden">
-          <p id="capture-title" class="capture-title"></p>
-          <p id="capture-subtitle" class="capture-subtitle"></p>
-          <dl class="meta-list">
-            <div>
-              <dt>page_type</dt>
-              <dd id="field-page-type">-</dd>
-            </div>
-            <div>
-              <dt>doi</dt>
-              <dd id="field-doi">-</dd>
-            </div>
-            <div>
-              <dt>source</dt>
-              <dd id="field-source">-</dd>
-            </div>
-            <div>
-              <dt>url</dt>
-              <dd id="field-url" class="multiline">-</dd>
-            </div>
-          </dl>
-          <details class="details-box">
-            <summary>// raw_extracted_fields</summary>
-            <pre id="raw-preview"></pre>
-          </details>
-        </div>
-      </section>
+        <section id="vault-card" class="card hidden">
+          <div class="section-heading">
+            <h2>// target_vault</h2>
+            <button id="refresh-vaults" class="ghost-button compact" type="button">refresh</button>
+          </div>
+          <label class="field">
+            <span>writable_vault</span>
+            <select id="vault-select"></select>
+          </label>
+          <p id="vault-hint" class="microcopy">// loading_vault_routes</p>
+        </section>
 
-      <section id="vault-card" class="card hidden">
-        <div class="section-heading">
-          <h2>// target_vault</h2>
-          <button id="refresh-vaults" class="ghost-button compact" type="button">refresh</button>
-        </div>
-        <label class="field">
-          <span>writable_vault</span>
-          <select id="vault-select"></select>
-        </label>
-        <p id="vault-hint" class="microcopy">// loading_vault_routes</p>
-      </section>
+        <section id="drive-card" class="card hidden">
+          <div class="section-heading">
+            <h2>// drive_storage</h2>
+            <span id="drive-pill" class="pill">checking</span>
+          </div>
+          <p id="drive-copy" class="supporting-text">
+            checking whether the RefHub account behind this API key has Google Drive PDF storage enabled.
+          </p>
+        </section>
+      </div>
 
-      <footer class="actions">
-        <button id="save-button" class="primary-button" type="button" disabled>save_to_refhub</button>
-      </footer>
+      <div class="panel-footer">
+        <section id="message-banner" class="banner hidden" aria-live="polite"></section>
+        <footer class="actions">
+          <button id="save-button" class="primary-button" type="button" disabled>save_to_refhub</button>
+        </footer>
+      </div>
     </main>
 
     <script type="module" src="js/popup.js"></script>

@@ -9,6 +9,8 @@ This repo contains the first working RefHub browser extension prototype describe
 - shows a popup preview with page type, DOI, source, and normalized item fields
 - lets the user configure a RefHub API key
 - lists writable vaults from RefHub and saves a single item with `POST /api/v1/vaults/:vaultId/items`
+- detects whether the RefHub account behind the configured API key has linked Google Drive storage
+- when Drive storage is linked and a `pdf_url` is available, asks the backend to copy the PDF into the managed Drive folder during save
 - opens the matching RefHub route after save: `/public/:slug` for public vaults, `/vault/:id` for private or shared vaults
 - reports clear setup, extraction, auth, and save errors
 
@@ -106,6 +108,7 @@ Important setup details:
 
 - Release builds already bundle the production RefHub API and app URLs.
 - Current frontend key-creation path is `/profile-edit` → `api_keys`.
+- Current Google Drive link path is `/profile-edit` → `storage`.
 - The extension only surfaces writable vaults (`owner` or `editor` access).
 
 Required API-key scopes:
