@@ -6,6 +6,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const srcDir = path.join(rootDir, "src");
 const distDir = path.join(rootDir, "dist");
+
+// Read version from package.json
+const packageJson = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
+const version = packageJson.version;
 const PRODUCTION_API_BASE_URL = "https://refhub-api.netlify.app";
 const PRODUCTION_APP_BASE_URL = "https://refhub.io";
 const buildDefaults = {
@@ -72,11 +76,11 @@ async function writeManifest(targetDir, manifest) {
 function createBaseManifest() {
   return {
     manifest_version: 3,
-    name: "refhub ext",
-    version: "0.1.0",
+    name: "refhub",
+    version: version,
     description: "capture and save to your refhub vault.",
     action: {
-      default_title: "refhub Capture",
+      default_title: "refhub",
       default_popup: "popup.html",
       default_icon: {
         16: "icons/refhub-16.png",
@@ -120,7 +124,7 @@ function createFirefoxManifest() {
     },
     browser_specific_settings: {
       gecko: {
-        id: "refhub-capture-prototype@refhub.io",
+        id: "refhub@refhub.io",
         strict_min_version: "140.0",
         data_collection_permissions: {
           required: ["none"],
