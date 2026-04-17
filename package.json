@@ -1,8 +1,8 @@
 {
-  "name": "refhub-browser-extension-prototype",
+  "name": "@refhub/browser-extension",
   "version": "2.0.0",
   "private": true,
-  "description": "refhub browser extension prototype",
+  "description": "refhub browser extension",
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:dev": "REFHUB_ALLOW_CUSTOM_URLS=1 node scripts/build.mjs",
