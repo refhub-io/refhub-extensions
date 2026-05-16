@@ -2,6 +2,9 @@
 
 > // browser_extension for [refhub.io](https://refhub.io)
 
+[![Available in the Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-available-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/refhub/ggoophlbadcgkmcpnbnfjacknccpkmgc)
+[![Get the Firefox Add-on](https://img.shields.io/badge/Firefox%20Add--ons-available-FF7139?logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/en-US/firefox/addon/refhub/)
+
 browser extension for saving papers to refhub directly from any tab. one shared source tree, browser-specific manifests for chrome and firefox.
 
 ---
@@ -52,8 +55,8 @@ manifest strategy:
 
 ### store (recommended)
 
-- **chrome / chromium** — [chrome web store](https://chromewebstore.google.com) *(pending approval)*
-- **firefox** — [mozilla add-ons](https://addons.mozilla.org) *(pending approval)*
+- **chrome / chromium** — [chrome web store](https://chromewebstore.google.com/detail/refhub/ggoophlbadcgkmcpnbnfjacknccpkmgc)
+- **firefox** — [mozilla add-ons](https://addons.mozilla.org/en-US/firefox/addon/refhub/)
 
 ### developer preview
 
