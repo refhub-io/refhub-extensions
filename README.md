@@ -149,5 +149,3 @@ capture uses `activeTab` + `scripting.executeScript` — no persistent access to
 shared across browsers: popup ui, extraction heuristics, normalization, storage schema, refhub api client.
 
 isolated per browser: manifests, a thin `chrome` vs `browser` api compatibility layer, auth handoff, service worker lifecycle differences.
-
-chrome-first for v1. firefox support is an incremental adapter-and-testing exercise, not a separate implementation.
