@@ -67,6 +67,8 @@ Bump `package.json` for shipped extension behavior changes:
 - Minor: new capture behavior, settings, or supported site types.
 - Major: breaking storage schema, permission model, endpoint model, or install expectations.
 
+Release tags should use the `vX.Y.Z` form for new releases. The historical `2.0.0` tag predates that convention.
+
 Do not widen browser permissions without explicitly explaining why in the PR.
 
 ## Security and credentials
