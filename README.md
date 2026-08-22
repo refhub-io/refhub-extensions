@@ -7,6 +7,8 @@
 
 browser extension for saving papers to refhub directly from any tab. one shared source tree, browser-specific manifests for chrome and firefox.
 
+Current release baseline: `2.0.1`. See `CHANGELOG.md` for release notes.
+
 ---
 
 ## // what it does
